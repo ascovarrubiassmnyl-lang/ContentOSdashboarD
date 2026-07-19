@@ -1,0 +1,16 @@
+// Configuración del Worker de Cloudflare (Content OS)
+// El nombre DEBE coincidir con el worker creado en el dashboard.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dashboardscav",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-03-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Conserva las variables/secrets configurados en el dashboard de
+  // Cloudflare — sin esto, cada deploy los borraría.
+  "keep_vars": true
+}

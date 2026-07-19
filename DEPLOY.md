@@ -43,19 +43,25 @@ Next.js corre en Cloudflare con el adaptador **OpenNext**
   el dashboard de Cloudflare y ellos compilan en la nube (no dependes del Node local).
 - O actualizar Node local (`brew install node@22`) y desplegar con wrangler.
 
+El repo YA incluye la configuración del adaptador: `open-next.config.ts`,
+`wrangler.jsonc` (worker "dashboardscav", flag nodejs_compat, keep_vars) y las
+dependencias `@opennextjs/cloudflare` + `wrangler`.
+
 Pasos (vía Workers Builds):
 1. Sube el proyecto a un repo de GitHub (privado).
 2. En Cloudflare: **Workers & Pages → Create → conectar repo**.
-3. Framework preset: **Next.js (OpenNext)**. Build command por defecto.
-4. En **Settings → Variables**: agrega las del `.env.example`
-   (Zernio, Anthropic, Supabase ×3, CRON_SECRET).
+3. En **Settings → Build** del worker:
+   - Build command: `npx opennextjs-cloudflare build`
+   - Deploy command: `npx wrangler deploy`
+4. En **Settings → Variables and Secrets**: agrega como **Secret**
+   ZERNIO_API_KEY, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+   SUPABASE_SERVICE_ROLE_KEY y CRON_SECRET (y ANTHROPIC_API_KEY cuando exista).
    **Login (opcional, hoy desactivado):** la app solo pide login si defines
    `OWNER_EMAIL`. Sin esa variable, la URL queda abierta a quien la tenga.
    Alternativa sin tocar la app: **Cloudflare Access** (Zero Trust → Access)
    protege el dominio con tu cuenta de Google antes de llegar a la app.
-5. En **Settings → Runtime**: flag de compatibilidad **`nodejs_compat`**.
-6. Deploy → te da la URL `https://<worker>.workers.dev` (o tu dominio).
-7. Vuelve a Supabase → URL Configuration → pon esa URL como Site URL.
+5. Retry build / push → te da la URL `https://<worker>.workers.dev`.
+6. (Solo si reactivas el login) Supabase → URL Configuration → Site URL.
 
 ⚠️ **Producción requiere Supabase configurado**: en Workers no existe disco,
 así que el modo local de archivos JSON no funciona ahí. Sin las variables de
