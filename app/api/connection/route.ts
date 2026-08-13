@@ -1,43 +1,56 @@
 import { NextResponse } from 'next/server';
-import { readSingleton, writeSingleton } from '@/lib/db';
+import {
+  activeWorkspace,
+  hasZernioFor,
+  readSingletonFor,
+  writeSingletonFor,
+} from '@/lib/accounts';
 import { seedIfNeeded, touchSync } from '@/lib/mock';
-import { hasZernioKey, syncFromZernio } from '@/lib/zernio';
+import { syncFromZernio } from '@/lib/zernio';
 import { IgAccount } from '@/types';
 
-// Fuente de datos: Zernio (Instagram real) si hay API key; si no, demo.
-function source(): 'zernio' | 'demo' {
-  return hasZernioKey() ? 'zernio' : 'demo';
-}
-
+// Fuente de datos de la CUENTA ACTIVA: Zernio (Instagram real) si esa cuenta
+// tiene API key propia (o hereda la del entorno); si no, demo.
 export async function GET() {
-  if (source() === 'demo') await seedIfNeeded();
-  let account = await readSingleton<IgAccount>('account');
+  const ws = await activeWorkspace();
+  const real = await hasZernioFor(ws);
+  if (!real) await seedIfNeeded(ws);
+
+  let account = await readSingletonFor<IgAccount>(ws, 'account');
 
   // Primer arranque con Zernio y BD vacía → sincroniza de una vez para
   // que el dashboard nunca aparezca en blanco.
-  if (!account && source() === 'zernio') {
+  let syncError: string | null = null;
+  if (!account && real) {
     try {
-      await syncFromZernio();
-      account = await readSingleton<IgAccount>('account');
-    } catch {
-      // sin conexión a Zernio en este momento — la UI ofrece "Sincronizar ahora"
+      await syncFromZernio(ws);
+      account = await readSingletonFor<IgAccount>(ws, 'account');
+    } catch (err) {
+      // Antes se tragaba el error en silencio y la cuenta parecía conectada
+      // pero sin datos, sin explicación. Ahora se devuelve para que la UI
+      // pueda decir exactamente qué falta (p. ej. el add-on de Zernio).
+      syncError = (err as Error).message;
     }
   }
 
   return NextResponse.json({
     account,
-    source: source(),
-    demoMode: source() === 'demo',
-    realConnected: source() === 'zernio',
+    workspace: { id: ws.id, label: ws.label, username: ws.username },
+    source: real ? 'zernio' : 'demo',
+    demoMode: !real,
+    realConnected: real,
+    hasData: Boolean(account),
+    syncError,
   });
 }
 
-// Sincronizar ahora
+// Sincronizar ahora (la cuenta activa)
 export async function POST() {
-  if (source() === 'zernio') {
+  const ws = await activeWorkspace();
+  if (await hasZernioFor(ws)) {
     try {
-      const result = await syncFromZernio();
-      const account = await readSingleton<IgAccount>('account');
+      const result = await syncFromZernio(ws);
+      const account = await readSingletonFor<IgAccount>(ws, 'account');
       return NextResponse.json({ ok: true, account, source: 'zernio', result });
     } catch (err) {
       return NextResponse.json(
@@ -46,29 +59,31 @@ export async function POST() {
       );
     }
   }
-  await seedIfNeeded();
-  await touchSync();
-  const account = await readSingleton<IgAccount>('account');
+  await seedIfNeeded(ws);
+  await touchSync(ws);
+  const account = await readSingletonFor<IgAccount>(ws, 'account');
   return NextResponse.json({ ok: true, account, source: 'demo' });
 }
 
 // Desconectar (local — la conexión real se gestiona en el panel de Zernio)
 export async function DELETE() {
-  const account = await readSingleton<IgAccount>('account');
+  const ws = await activeWorkspace();
+  const account = await readSingletonFor<IgAccount>(ws, 'account');
   if (account) {
     account.connected = false;
-    await writeSingleton('account', account);
+    await writeSingletonFor(ws, 'account', account);
   }
   return NextResponse.json({ ok: true });
 }
 
 // Reconectar
 export async function PATCH() {
-  const account = await readSingleton<IgAccount>('account');
+  const ws = await activeWorkspace();
+  const account = await readSingletonFor<IgAccount>(ws, 'account');
   if (account) {
     account.connected = true;
     account.last_sync_at = new Date().toISOString();
-    await writeSingleton('account', account);
+    await writeSingletonFor(ws, 'account', account);
   }
   return NextResponse.json({ ok: true, account });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { chatReply } from '@/lib/generator';
+import { activeWorkspace } from '@/lib/accounts';
 import { seedIfNeeded } from '@/lib/mock';
 
 const chatSchema = z.object({
@@ -16,7 +17,8 @@ const chatSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  await seedIfNeeded();
+  const ws = await activeWorkspace();
+  await seedIfNeeded(ws);
   const parsed = chatSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -25,7 +27,7 @@ export async function POST(req: NextRequest) {
     );
   }
   try {
-    const reply = await chatReply(parsed.data.message, parsed.data.history);
+    const reply = await chatReply(ws, parsed.data.message, parsed.data.history);
     return NextResponse.json({ reply });
   } catch (err) {
     return NextResponse.json(

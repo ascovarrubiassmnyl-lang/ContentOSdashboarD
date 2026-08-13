@@ -73,6 +73,19 @@ export async function writeSingleton<T>(name: string, value: T): Promise<void> {
   else fileWrite(name, value);
 }
 
+// Borra una clave entera. Se usa al eliminar una cuenta: cada colección suya
+// vive en su propia clave con namespace, así que basta con borrarlas.
+export async function deleteKey(name: string): Promise<void> {
+  if (isSupabaseConfigured()) {
+    const { error } = await supabaseAdmin().from('app_store').delete().eq('key', name);
+    if (error) throw new Error(`Supabase (borrar ${name}): ${error.message}`);
+    return;
+  }
+  ensureDir();
+  const file = path.join(DATA_DIR, `${name}.json`);
+  if (fs.existsSync(file)) fs.unlinkSync(file);
+}
+
 export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }

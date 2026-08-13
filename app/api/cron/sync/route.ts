@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { hasZernioKey, syncFromZernio } from '@/lib/zernio';
+import { hasZernioFor, listAccounts } from '@/lib/accounts';
+import { syncFromZernio } from '@/lib/zernio';
 import { purgeExpiredCalendar } from '@/lib/maintenance';
 
 // Cron diario (7:00 a.m.): sincroniza Instagram vía Zernio y purga el
-// calendario. Protegido con CRON_SECRET — el scheduler (Cloudflare Cron
-// Trigger o similar) debe llamar:
+// calendario — de TODAS las cuentas, una por una. Protegido con CRON_SECRET;
+// el scheduler (Cloudflare Cron Trigger o similar) debe llamar:
 //   GET /api/cron/sync  con header  authorization: Bearer <CRON_SECRET>
 //   (o ?secret=<CRON_SECRET> si el scheduler no soporta headers)
 export async function GET(req: NextRequest) {
@@ -23,29 +24,40 @@ export async function GET(req: NextRequest) {
   }
 
   const started = Date.now();
-  const result: Record<string, unknown> = {};
+  const accounts = await listAccounts();
+  const results: Record<string, unknown>[] = [];
+  let failed = 0;
 
-  // 1) Sync de Instagram (solo si Zernio está configurado)
-  if (hasZernioKey()) {
-    try {
-      result.sync = await syncFromZernio();
-    } catch (err) {
-      result.syncError = (err as Error).message;
+  for (const ws of accounts) {
+    const entry: Record<string, unknown> = { account: ws.label };
+
+    // 1) Sync de Instagram (solo si esa cuenta tiene Zernio configurado)
+    if (await hasZernioFor(ws)) {
+      try {
+        entry.sync = await syncFromZernio(ws);
+      } catch (err) {
+        entry.syncError = (err as Error).message;
+        failed++;
+      }
+    } else {
+      entry.sync = 'omitido (sin API key de Zernio)';
     }
-  } else {
-    result.sync = 'omitido (sin ZERNIO_API_KEY)';
-  }
 
-  // 2) Purga de piezas vencidas del calendario
-  try {
-    result.calendarPurged = await purgeExpiredCalendar();
-  } catch (err) {
-    result.purgeError = (err as Error).message;
+    // 2) Purga de piezas vencidas del calendario de esa cuenta
+    try {
+      entry.calendarPurged = await purgeExpiredCalendar(ws);
+    } catch (err) {
+      entry.purgeError = (err as Error).message;
+      failed++;
+    }
+
+    results.push(entry);
   }
 
   return NextResponse.json({
-    ok: !result.syncError && !result.purgeError,
-    ...result,
+    ok: failed === 0,
+    accounts: results.length,
+    results,
     tookMs: Date.now() - started,
     at: new Date().toISOString(),
   });

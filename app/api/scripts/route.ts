@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { readCollection, uid, writeCollection } from '@/lib/db';
+import { uid } from '@/lib/db';
+import { activeWorkspace, readFor, writeFor } from '@/lib/accounts';
 import { seedIfNeeded } from '@/lib/mock';
 import { Script } from '@/types';
 
@@ -18,15 +19,17 @@ const scriptSchema = z.object({
 });
 
 export async function GET() {
-  await seedIfNeeded();
-  const scripts = (await readCollection<Script>('scripts')).sort((a, b) =>
+  const ws = await activeWorkspace();
+  await seedIfNeeded(ws);
+  const scripts = (await readFor<Script>(ws, 'scripts')).sort((a, b) =>
     b.created_at.localeCompare(a.created_at)
   );
   return NextResponse.json({ scripts });
 }
 
 export async function POST(req: NextRequest) {
-  await seedIfNeeded();
+  const ws = await activeWorkspace();
+  await seedIfNeeded(ws);
   const parsed = scriptSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -36,12 +39,12 @@ export async function POST(req: NextRequest) {
   }
   const script: Script = {
     id: uid(),
-    account_id: 'acc_scav86',
+    account_id: ws.id,
     ...parsed.data,
     created_at: new Date().toISOString(),
   };
-  const scripts = await readCollection<Script>('scripts');
+  const scripts = await readFor<Script>(ws, 'scripts');
   scripts.unshift(script);
-  await writeCollection('scripts', scripts);
+  await writeFor(ws, 'scripts', scripts);
   return NextResponse.json({ script }, { status: 201 });
 }

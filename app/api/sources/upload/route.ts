@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readCollection, uid, writeCollection } from '@/lib/db';
+import { uid } from '@/lib/db';
+import { activeWorkspace, readFor, writeFor } from '@/lib/accounts';
 import { seedIfNeeded } from '@/lib/mock';
 import { extractText } from '@/lib/extract';
 import { saveUpload } from '@/lib/files';
@@ -16,7 +17,8 @@ const VALID_TYPES: SourceType[] = [
 ];
 
 export async function POST(req: NextRequest) {
-  await seedIfNeeded();
+  const ws = await activeWorkspace();
+  await seedIfNeeded(ws);
 
   let form: FormData;
   try {
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   const source: Source = {
     id,
-    account_id: 'acc_scav86',
+    account_id: ws.id,
     type,
     title: titleInput.trim() || fileName,
     content: text,
@@ -73,9 +75,9 @@ export async function POST(req: NextRequest) {
     created_at: new Date().toISOString(),
   };
 
-  const sources = await readCollection<Source>('sources');
+  const sources = await readFor<Source>(ws, 'sources');
   sources.unshift(source);
-  await writeCollection('sources', sources);
+  await writeFor(ws, 'sources', sources);
 
   return NextResponse.json({ source }, { status: 201 });
 }

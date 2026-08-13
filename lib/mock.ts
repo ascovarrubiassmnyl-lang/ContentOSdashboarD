@@ -8,10 +8,14 @@ import {
   MetricSnapshot,
   StoryMetric,
 } from '@/types';
-import { readSingleton, writeSingleton, readCollection, writeCollection } from './db';
-import { hasZernioKey } from './zernio';
+import {
+  Workspace,
+  hasZernioFor,
+  readSingletonFor,
+  writeFor,
+  writeSingletonFor,
+} from './accounts';
 
-const ACCOUNT_ID = 'acc_scav86';
 const DAYS = 90;
 
 // PRNG mulberry32 — determinista
@@ -59,19 +63,20 @@ const CAPTIONS = [
   'Lo probé durante 30 días — estos son los datos 📈',
 ];
 
-export async function seedIfNeeded(): Promise<void> {
+export async function seedIfNeeded(ws: Workspace): Promise<void> {
   // Con Zernio configurado los datos reales llegan por sync — JAMÁS sembrar
   // datos demo en ese caso (contaminaría producción con posts falsos).
-  if (hasZernioKey()) return;
-  const existing = await readSingleton<IgAccount>('account');
+  if (await hasZernioFor(ws)) return;
+  const existing = await readSingletonFor<IgAccount>(ws, 'account');
   if (existing) return;
 
+  const accountId = ws.id;
   const rand = mulberry32(861386);
   const today = new Date();
 
   // ── Cuenta ────────────────────────────────────────────────
   const account: IgAccount = {
-    id: ACCOUNT_ID,
+    id: accountId,
     ig_user_id: '17841400000086',
     username: 'scav_86',
     account_type: 'MEDIA_CREATOR',
@@ -79,7 +84,7 @@ export async function seedIfNeeded(): Promise<void> {
     last_sync_at: new Date(Date.now() - 16 * 60_000).toISOString(),
     connected: true,
   };
-  await writeSingleton('account', account);
+  await writeSingletonFor(ws, 'account', account);
 
   // ── Snapshots diarios (90 días, tendencia creciente) ─────
   let followers = 8_420;
@@ -110,7 +115,7 @@ export async function seedIfNeeded(): Promise<void> {
 
     snapshots.push({
       id: `snap_${date}`,
-      account_id: ACCOUNT_ID,
+      account_id: accountId,
       snapshot_date: date,
       followers,
       followers_gained: gained,
@@ -130,7 +135,7 @@ export async function seedIfNeeded(): Promise<void> {
       frequency: +(views / reach).toFixed(2),
     });
   }
-  await writeCollection('metric_snapshots', snapshots);
+  await writeFor(ws, 'metric_snapshots', snapshots);
 
   // ── Posts (24 piezas, mezcla de formatos) ────────────────
   const posts: MediaPost[] = [];
@@ -156,7 +161,7 @@ export async function seedIfNeeded(): Promise<void> {
 
     posts.push({
       id: `post_${i}`,
-      account_id: ACCOUNT_ID,
+      account_id: accountId,
       ig_media_id: `1784140000${1000 + i}`,
       media_type,
       caption: CAPTIONS[i % CAPTIONS.length],
@@ -176,7 +181,7 @@ export async function seedIfNeeded(): Promise<void> {
         : null,
     });
   }
-  await writeCollection('media_posts', posts);
+  await writeFor(ws, 'media_posts', posts);
 
   // ── Historias activas ────────────────────────────────────
   const stories: StoryMetric[] = [
@@ -197,13 +202,13 @@ export async function seedIfNeeded(): Promise<void> {
       published_at: new Date(Date.now() - (i + 1) * 3 * 3600_000).toISOString(),
     };
   });
-  await writeCollection('stories', stories);
+  await writeFor(ws, 'stories', stories);
 
   // ── Fuentes de ejemplo ───────────────────────────────────
-  await writeCollection('sources', [
+  await writeFor(ws, 'sources', [
     {
       id: 'src_1',
-      account_id: ACCOUNT_ID,
+      account_id: accountId,
       type: 'comentario',
       title: 'Comentarios recurrentes sobre horarios',
       content:
@@ -214,7 +219,7 @@ export async function seedIfNeeded(): Promise<void> {
     },
     {
       id: 'src_2',
-      account_id: ACCOUNT_ID,
+      account_id: accountId,
       type: 'dm',
       title: 'DM — bloqueo creativo de una seguidora',
       content:
@@ -225,7 +230,7 @@ export async function seedIfNeeded(): Promise<void> {
     },
     {
       id: 'src_3',
-      account_id: ACCOUNT_ID,
+      account_id: accountId,
       type: 'objecion',
       title: 'Objeción: "la IA hace contenido genérico"',
       content:
@@ -237,11 +242,11 @@ export async function seedIfNeeded(): Promise<void> {
   ]);
 
   // Colecciones vacías que se llenan con el uso
-  await writeCollection('scripts', []);
-  await writeCollection('calendar_items', [
+  await writeFor(ws, 'scripts', []);
+  await writeFor(ws, 'calendar_items', [
     {
       id: 'cal_1',
-      account_id: ACCOUNT_ID,
+      account_id: accountId,
       script_id: null,
       title: 'Reel — la métrica que miras mal',
       format: 'reel',
@@ -251,7 +256,7 @@ export async function seedIfNeeded(): Promise<void> {
     },
     {
       id: 'cal_2',
-      account_id: ACCOUNT_ID,
+      account_id: accountId,
       script_id: null,
       title: 'Carrusel — checklist de hooks',
       format: 'carrusel',
@@ -260,13 +265,13 @@ export async function seedIfNeeded(): Promise<void> {
       notes: '',
     },
   ]);
-  await writeCollection('reports', []);
+  await writeFor(ws, 'reports', []);
 }
 
-export async function touchSync(): Promise<void> {
-  const account = await readSingleton<IgAccount>('account');
+export async function touchSync(ws: Workspace): Promise<void> {
+  const account = await readSingletonFor<IgAccount>(ws, 'account');
   if (account) {
     account.last_sync_at = new Date().toISOString();
-    await writeSingleton('account', account);
+    await writeSingletonFor(ws, 'account', account);
   }
 }

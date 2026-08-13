@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { readCollection } from '@/lib/db';
+import { activeWorkspace, readFor } from '@/lib/accounts';
 import { seedIfNeeded } from '@/lib/mock';
 import { generateReport } from '@/lib/reports';
 import { Report } from '@/types';
@@ -11,13 +11,15 @@ const reportSchema = z.object({
 });
 
 export async function GET() {
-  await seedIfNeeded();
-  const reports = await readCollection<Report>('reports');
+  const ws = await activeWorkspace();
+  await seedIfNeeded(ws);
+  const reports = await readFor<Report>(ws, 'reports');
   return NextResponse.json({ reports });
 }
 
 export async function POST(req: NextRequest) {
-  await seedIfNeeded();
+  const ws = await activeWorkspace();
+  await seedIfNeeded(ws);
   const parsed = reportSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -32,7 +34,7 @@ export async function POST(req: NextRequest) {
     );
   }
   try {
-    const report = await generateReport(parsed.data.period_start, parsed.data.period_end);
+    const report = await generateReport(ws, parsed.data.period_start, parsed.data.period_end);
     return NextResponse.json({ report }, { status: 201 });
   } catch (err) {
     return NextResponse.json(

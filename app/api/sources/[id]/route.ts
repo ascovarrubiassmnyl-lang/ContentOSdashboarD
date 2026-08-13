@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { readCollection, writeCollection } from '@/lib/db';
+import { activeWorkspace, readFor, writeFor } from '@/lib/accounts';
 import { Source } from '@/types';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -18,6 +18,7 @@ const patchSchema = z
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
+  const ws = await activeWorkspace();
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -25,18 +26,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       { status: 400 }
     );
   }
-  const sources = await readCollection<Source>('sources');
+  const sources = await readFor<Source>(ws, 'sources');
   const idx = sources.findIndex((s) => s.id === id);
   if (idx === -1) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
   sources[idx] = { ...sources[idx], ...parsed.data, id };
-  await writeCollection('sources', sources);
+  await writeFor(ws, 'sources', sources);
   return NextResponse.json({ source: sources[idx] });
 }
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const sources = await readCollection<Source>('sources');
-  await writeCollection(
+  const ws = await activeWorkspace();
+  const sources = await readFor<Source>(ws, 'sources');
+  await writeFor(
+    ws,
     'sources',
     sources.filter((s) => s.id !== id)
   );

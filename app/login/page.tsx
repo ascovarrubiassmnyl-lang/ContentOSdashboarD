@@ -47,7 +47,7 @@ function LoginForm() {
         Content <span className="text-primary">OS</span>
       </p>
       <p className="text-xs text-muted text-center mt-1 mb-8">
-        Command Center · @scav_86
+        Command Center
       </p>
 
       {sent ? (

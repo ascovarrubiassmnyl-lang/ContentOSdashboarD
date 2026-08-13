@@ -25,7 +25,24 @@ con `ZERNIO_API_KEY` en `.env.local` entran las métricas reales de Instagram.
 | `/ideas` | Banco de ideas por etapa del funnel (TOFU/MOFU/BOFU) — Kanban o tabla |
 | `/generador` | Chat de guiones con IA — usa métricas reales + banco de fuentes + los 7 frameworks |
 | `/calendario` | Calendario editorial — niveles de funnel, duplicar/pegar, auto-limpieza a las 24 h |
-| `/conexion` | Estado de la conexión con Instagram (vía Zernio) y sync manual |
+| `/conexion` | Cuentas conectadas (multicuenta), estado de la conexión y sync manual |
+
+## Multicuenta
+
+El selector del menú lateral cambia entre cuentas de Instagram. Cada cuenta guarda su
+**propia API key de Zernio** (cifrada con `ENCRYPTION_KEY`, AES-256-GCM) y tiene sus
+datos completamente separados: métricas, posts, fuentes, ideas, calendario, guiones y
+reportes. Cambiar de cuenta cambia el dashboard entero.
+
+Añadir una cuenta: **Conexión → Añadir cuenta** → pega la API key de Zernio → elige cuál
+de sus cuentas de Instagram quieres → se sincroniza sola. Puede ser la misma key (si esa
+cuenta de Zernio tiene varias cuentas de IG) o la de otra cuenta de Zernio distinta.
+
+La cuenta activa vive en una cookie `httpOnly`, así que el servidor resuelve solo de qué
+cuenta son los datos de cada petición. El cron diario recorre **todas** las cuentas.
+
+> La primera cuenta (la que existía antes del multicuenta) conserva sus claves de
+> almacenamiento originales y puede seguir usando `ZERNIO_API_KEY` del entorno.
 
 ## Fuente de datos: Zernio
 
@@ -56,6 +73,8 @@ plantillas alimentadas con los datos reales.
 ## Seguridad
 
 - Llaves de API solo en `.env.local` / variables de entorno del servidor — jamás en el cliente.
+- Las API keys de Zernio por cuenta se guardan **cifradas** (AES-256-GCM) y nunca se
+  devuelven al navegador: la UI solo sabe si existen, no su valor.
 - Todas las llamadas a Zernio y Anthropic salen desde API routes (server-side).
 - Validación con Zod en todos los endpoints de escritura.
 - RLS activo en el esquema de Supabase para producción.

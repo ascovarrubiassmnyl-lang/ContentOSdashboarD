@@ -21,7 +21,7 @@ import {
 import { Button, Card, DeltaBadge, Spinner } from '@/components/ui';
 import {
   CalendarItem,
-  IgAccount,
+  ConnectionResponse,
   MetricsResponse,
   Report,
   Script,
@@ -43,9 +43,15 @@ const FORMAT_ICON: Record<string, typeof Film> = {
 };
 
 export default function ResumenPage() {
-  const { data: metrics } = useQuery<MetricsResponse>({
+  const { data: metrics, isError: metricsFailed } = useQuery<MetricsResponse>({
     queryKey: ['metrics', '7d'],
-    queryFn: async () => (await fetch('/api/metrics?period=7d')).json(),
+    // Sin este check, un 500 devuelve HTML, `.json()` revienta y la página se
+    // queda cargando para siempre sin decir qué pasó.
+    queryFn: async () => {
+      const res = await fetch('/api/metrics?period=7d');
+      if (!res.ok) throw new Error('No se pudieron cargar las métricas');
+      return res.json();
+    },
   });
   const { data: cal } = useQuery<{ items: CalendarItem[] }>({
     queryKey: ['calendar'],
@@ -59,12 +65,26 @@ export default function ResumenPage() {
     queryKey: ['scripts'],
     queryFn: async () => (await fetch('/api/scripts')).json(),
   });
-  const { data: conn } = useQuery<{ account: IgAccount }>({
+  const { data: conn } = useQuery<ConnectionResponse>({
     queryKey: ['connection'],
     queryFn: async () => (await fetch('/api/connection')).json(),
   });
 
   if (!metrics) {
+    if (metricsFailed) {
+      return (
+        <div className="card border-negative/40 bg-negative/5 p-6 mt-10 max-w-lg mx-auto text-center">
+          <p className="font-bold text-negative mb-1">No se pudieron cargar las métricas</p>
+          <p className="text-sm text-muted mb-4">
+            {conn?.syncError ??
+              'Revisa el estado de la conexión de esta cuenta y vuelve a sincronizar.'}
+          </p>
+          <Link href="/conexion">
+            <Button variant="secondary">Ir a Conexión IG</Button>
+          </Link>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center py-40 gap-3 text-muted">
         <Spinner /> Cargando resumen…
@@ -120,8 +140,8 @@ export default function ResumenPage() {
             Resumen de la semana
           </h1>
           <p className="text-sm text-muted mt-1">
-            @{conn?.account?.username ?? 'scav_86'} · datos actualizados{' '}
-            {conn?.account ? relativeTime(conn.account.last_sync_at) : '—'}
+            {conn?.workspace?.label ?? '—'} · datos actualizados{' '}
+            {conn?.account ? relativeTime(conn.account.last_sync_at) : 'nunca'}
           </p>
         </div>
         <div className="flex gap-2">

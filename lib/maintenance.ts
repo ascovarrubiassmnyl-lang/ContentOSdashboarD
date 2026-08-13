@@ -1,5 +1,5 @@
 // Tareas de mantenimiento compartidas entre el calendario y el cron.
-import { readCollection, writeCollection } from './db';
+import { Workspace, listAccounts, readFor, writeFor } from './accounts';
 import { CalendarItem } from '@/types';
 
 // Las piezas se eliminan solas 24 h después de su fecha programada.
@@ -17,9 +17,18 @@ export function filterExpired(items: CalendarItem[]): {
   return { kept, removed: items.length - kept.length };
 }
 
-export async function purgeExpiredCalendar(): Promise<number> {
-  const all = await readCollection<CalendarItem>('calendar_items');
+export async function purgeExpiredCalendar(ws: Workspace): Promise<number> {
+  const all = await readFor<CalendarItem>(ws, 'calendar_items');
   const { kept, removed } = filterExpired(all);
-  if (removed > 0) await writeCollection('calendar_items', kept);
+  if (removed > 0) await writeFor(ws, 'calendar_items', kept);
   return removed;
+}
+
+// El cron purga el calendario de TODAS las cuentas, no solo la activa.
+export async function purgeAllAccounts(): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  for (const ws of await listAccounts()) {
+    out[ws.label] = await purgeExpiredCalendar(ws);
+  }
+  return out;
 }

@@ -1,5 +1,6 @@
 import { MediaPost, MetricSnapshot, Report } from '@/types';
-import { readCollection, uid, writeCollection } from './db';
+import { uid } from './db';
+import { Workspace, readFor, writeFor } from './accounts';
 import { askClaude, hasClaudeKey } from './claude';
 import { seedIfNeeded } from './mock';
 
@@ -11,17 +12,18 @@ function sum(rows: MetricSnapshot[], key: keyof MetricSnapshot) {
   return rows.reduce((a, r) => a + (r[key] as number), 0);
 }
 
-const REPORT_SYSTEM = `Eres el analista de contenido de Santiago Castro (@scav_86). Escribes reportes ejecutivos en español, en Markdown, con esta estructura: ## Resumen ejecutivo (3 líneas), ## Qué funcionó, ## Qué cayó, ## Recomendaciones concretas (accionables mañana, no teoría). Usas los números reales que te paso, sin inventar datos.`;
+const reportSystem = (who: string) => `Eres el analista de contenido de ${who}. Escribes reportes ejecutivos en español, en Markdown, con esta estructura: ## Resumen ejecutivo (3 líneas), ## Qué funcionó, ## Qué cayó, ## Recomendaciones concretas (accionables mañana, no teoría). Usas los números reales que te paso, sin inventar datos.`;
 
 export async function generateReport(
+  ws: Workspace,
   periodStart: string,
   periodEnd: string
 ): Promise<Report> {
-  await seedIfNeeded();
-  const snapshots = (await readCollection<MetricSnapshot>('metric_snapshots')).filter((s) =>
+  await seedIfNeeded(ws);
+  const snapshots = (await readFor<MetricSnapshot>(ws, 'metric_snapshots')).filter((s) =>
     inRange(s.snapshot_date, periodStart, periodEnd)
   );
-  const posts = (await readCollection<MediaPost>('media_posts')).filter((p) =>
+  const posts = (await readFor<MediaPost>(ws, 'media_posts')).filter((p) =>
     inRange(p.published_at.slice(0, 10), periodStart, periodEnd)
   );
 
@@ -38,7 +40,7 @@ export async function generateReport(
   const prevStart = new Date(new Date(prevEnd).getTime() - (days - 1) * 86400_000)
     .toISOString()
     .slice(0, 10);
-  const prevSnapshots = (await readCollection<MetricSnapshot>('metric_snapshots')).filter((s) =>
+  const prevSnapshots = (await readFor<MetricSnapshot>(ws, 'metric_snapshots')).filter((s) =>
     inRange(s.snapshot_date, prevStart, prevEnd)
   );
 
@@ -95,7 +97,7 @@ export async function generateReport(
           } interacciones`
       )
       .join('\n')}`;
-    summary = await askClaude(REPORT_SYSTEM, dataBlock, 2500);
+    summary = await askClaude(reportSystem(ws.username ? `${ws.label} (@${ws.username})` : ws.label), dataBlock, 2500);
   } else {
     const arrow = (d: number | null) =>
       d === null ? '—' : d >= 0 ? `▲ +${d}%` : `▼ ${d}%`;
@@ -151,7 +153,7 @@ ${
 
   const report: Report = {
     id: uid(),
-    account_id: 'acc_scav86',
+    account_id: ws.id,
     period_start: periodStart,
     period_end: periodEnd,
     summary_md: summary,
@@ -159,8 +161,8 @@ ${
     created_at: new Date().toISOString(),
   };
 
-  const reports = await readCollection<Report>('reports');
+  const reports = await readFor<Report>(ws, 'reports');
   reports.unshift(report);
-  await writeCollection('reports', reports);
+  await writeFor(ws, 'reports', reports);
   return report;
 }

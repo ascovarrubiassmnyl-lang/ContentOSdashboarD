@@ -1,0 +1,86 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { z } from 'zod';
+import {
+  ACTIVE_COOKIE,
+  activeWorkspace,
+  createAccount,
+  listAccounts,
+  zernioKeyState,
+} from '@/lib/accounts';
+import { hasEncryptionKey } from '@/lib/crypto';
+import { syncFromZernio } from '@/lib/zernio';
+
+// La API key JAMÁS sale de aquí: solo se informa si existe y de dónde viene.
+export async function GET() {
+  const accounts = await listAccounts();
+  const active = await activeWorkspace();
+  const rows = await Promise.all(
+    accounts.map(async (ws) => ({
+      id: ws.id,
+      label: ws.label,
+      username: ws.username,
+      color: ws.color,
+      followers: ws.followers,
+      avatar_url: ws.avatar_url,
+      last_sync_at: ws.last_sync_at,
+      legacy: Boolean(ws.legacy),
+      keyState: await zernioKeyState(ws),
+      active: ws.id === active.id,
+    }))
+  );
+  return NextResponse.json({ accounts: rows, activeId: active.id });
+}
+
+const createSchema = z.object({
+  apiKey: z.string().min(10).max(400),
+  zernioAccountId: z.string().min(1).max(120),
+  username: z.string().min(1).max(80),
+  label: z.string().max(60).optional(),
+  followers: z.number().int().min(0).optional(),
+  avatarUrl: z.string().url().nullable().optional(),
+});
+
+export async function POST(req: NextRequest) {
+  if (!hasEncryptionKey()) {
+    return NextResponse.json(
+      {
+        error:
+          'Falta ENCRYPTION_KEY en el servidor. Genérala con "openssl rand -hex 32", añádela a las variables de entorno y reinicia.',
+      },
+      { status: 503 }
+    );
+  }
+  const parsed = createSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Datos inválidos', issues: parsed.error.issues },
+      { status: 400 }
+    );
+  }
+
+  let ws;
+  try {
+    ws = await createAccount(parsed.data);
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 409 });
+  }
+
+  // Deja la cuenta nueva como activa y trae sus datos de una vez.
+  (await cookies()).set(ACTIVE_COOKIE, ws.id, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365,
+  });
+
+  let syncError: string | null = null;
+  try {
+    await syncFromZernio(ws);
+  } catch (err) {
+    // La cuenta queda creada aunque el primer sync falle: se puede reintentar.
+    syncError = (err as Error).message;
+  }
+
+  return NextResponse.json({ account: ws, syncError }, { status: 201 });
+}

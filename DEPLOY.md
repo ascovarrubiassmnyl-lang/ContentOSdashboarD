@@ -54,8 +54,13 @@ Pasos (vía Workers Builds):
    - Build command: `npx opennextjs-cloudflare build`
    - Deploy command: `npx wrangler deploy`
 4. En **Settings → Variables and Secrets**: agrega como **Secret**
-   ZERNIO_API_KEY, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-   SUPABASE_SERVICE_ROLE_KEY y CRON_SECRET (y ANTHROPIC_API_KEY cuando exista).
+   ZERNIO_API_KEY, ENCRYPTION_KEY, NEXT_PUBLIC_SUPABASE_URL,
+   NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY y CRON_SECRET
+   (y ANTHROPIC_API_KEY cuando exista).
+   **ENCRYPTION_KEY** cifra las API keys de Zernio de las cuentas que añadas
+   desde la app. Genérala con `openssl rand -hex 32` y usa la MISMA que en
+   `.env.local` — si no, las cuentas guardadas en local no se descifran en
+   producción y hay que volver a pegar su key desde Conexión.
    **Login (opcional, hoy desactivado):** la app solo pide login si defines
    `OWNER_EMAIL`. Sin esa variable, la URL queda abierta a quien la tenga.
    Alternativa sin tocar la app: **Cloudflare Access** (Zero Trust → Access)

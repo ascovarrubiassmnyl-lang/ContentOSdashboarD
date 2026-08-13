@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { generateScript } from '@/lib/generator';
+import { activeWorkspace } from '@/lib/accounts';
 import { seedIfNeeded } from '@/lib/mock';
 
 const generateSchema = z.object({
@@ -13,7 +14,8 @@ const generateSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  await seedIfNeeded();
+  const ws = await activeWorkspace();
+  await seedIfNeeded(ws);
   const body = await req.json();
   const parsed = generateSchema.safeParse(body);
   if (!parsed.success) {
@@ -23,7 +25,7 @@ export async function POST(req: NextRequest) {
     );
   }
   try {
-    const script = await generateScript(parsed.data);
+    const script = await generateScript(ws, parsed.data);
     return NextResponse.json({ script });
   } catch (err) {
     return NextResponse.json(

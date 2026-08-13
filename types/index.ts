@@ -146,6 +146,17 @@ export interface Idea {
   created_at: string;
 }
 
+// Respuesta de /api/connection — describe la CUENTA ACTIVA, no una fija.
+export interface ConnectionResponse {
+  account: IgAccount | null;
+  workspace: { id: string; label: string; username: string };
+  source: 'zernio' | 'demo';
+  demoMode: boolean;
+  realConnected: boolean;
+  hasData: boolean;
+  syncError: string | null;
+}
+
 // ── Payloads agregados que sirven las API routes ────────────
 
 export interface KpiValue {

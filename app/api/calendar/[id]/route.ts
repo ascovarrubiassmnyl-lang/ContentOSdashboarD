@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { readCollection, writeCollection } from '@/lib/db';
+import { activeWorkspace, readFor, writeFor } from '@/lib/accounts';
 import { CalendarItem } from '@/types';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -21,6 +21,7 @@ const patchSchema = z
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
+  const ws = await activeWorkspace();
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -28,18 +29,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       { status: 400 }
     );
   }
-  const items = await readCollection<CalendarItem>('calendar_items');
+  const items = await readFor<CalendarItem>(ws, 'calendar_items');
   const idx = items.findIndex((i) => i.id === id);
   if (idx === -1) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
   items[idx] = { ...items[idx], ...parsed.data, id };
-  await writeCollection('calendar_items', items);
+  await writeFor(ws, 'calendar_items', items);
   return NextResponse.json({ item: items[idx] });
 }
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const items = await readCollection<CalendarItem>('calendar_items');
-  await writeCollection(
+  const ws = await activeWorkspace();
+  const items = await readFor<CalendarItem>(ws, 'calendar_items');
+  await writeFor(
+    ws,
     'calendar_items',
     items.filter((i) => i.id !== id)
   );

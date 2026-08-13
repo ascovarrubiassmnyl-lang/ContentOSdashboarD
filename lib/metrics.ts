@@ -1,14 +1,15 @@
 import {
+  CalendarItem,
   KpiValue,
   MediaPost,
   MetricSnapshot,
   MetricsResponse,
   Period,
+  Script,
   StoryMetric,
 } from '@/types';
-import { readCollection } from './db';
+import { Workspace, hasZernioFor, readFor } from './accounts';
 import { seedIfNeeded } from './mock';
-import { hasZernioKey } from './zernio';
 
 const PERIOD_DAYS: Record<Period, number> = { today: 1, '7d': 7, '30d': 30 };
 
@@ -21,20 +22,51 @@ function delta(current: number, previous: number): number | null {
   return ((current - previous) / previous) * 100;
 }
 
-export async function buildMetrics(period: Period): Promise<MetricsResponse> {
-  await seedIfNeeded();
-  const snapshots = (await readCollection<MetricSnapshot>('metric_snapshots')).sort(
+// Snapshot a cero para cuentas sin datos todavía. Conserva los seguidores que
+// Zernio ya reportó al conectar la cuenta, aunque no haya analytics por post.
+function emptySnapshot(ws: Workspace): MetricSnapshot {
+  return {
+    id: 'snap_vacio',
+    account_id: ws.id,
+    snapshot_date: new Date().toISOString().slice(0, 10),
+    followers: ws.followers ?? 0,
+    followers_gained: 0,
+    followers_lost: 0,
+    views: 0,
+    reach: 0,
+    interactions: 0,
+    engagement_rate: 0,
+    likes: 0,
+    comments: 0,
+    saves: 0,
+    shares: 0,
+    reposts: 0,
+    engaged_accounts: 0,
+    link_taps: 0,
+    ctr_bio: 0,
+    frequency: 0,
+  };
+}
+
+export async function buildMetrics(ws: Workspace, period: Period): Promise<MetricsResponse> {
+  await seedIfNeeded(ws);
+  const isReal = await hasZernioFor(ws);
+  const snapshots = (await readFor<MetricSnapshot>(ws, 'metric_snapshots')).sort(
     (a, b) => a.snapshot_date.localeCompare(b.snapshot_date)
   );
-  const posts = (await readCollection<MediaPost>('media_posts')).sort(
+  const posts = (await readFor<MediaPost>(ws, 'media_posts')).sort(
     (a, b) => b.published_at.localeCompare(a.published_at)
   );
-  const stories = await readCollection<StoryMetric>('stories');
+  const stories = await readFor<StoryMetric>(ws, 'stories');
 
   const n = PERIOD_DAYS[period];
   const current = snapshots.slice(-n);
   const previous = snapshots.slice(-n * 2, -n);
-  const latest = snapshots[snapshots.length - 1];
+  // Una cuenta recién añadida (o cuyo sync todavía no ha entrado) no tiene
+  // ningún snapshot. Antes esto reventaba con `latest.followers` y devolvía
+  // un 500 que dejaba las páginas cargando para siempre: ahora cae a un
+  // snapshot en cero y la UI muestra su estado vacío.
+  const latest = snapshots[snapshots.length - 1] ?? emptySnapshot(ws);
 
   const curReach = sum(current, 'reach');
   const prevReach = sum(previous, 'reach');
@@ -126,8 +158,8 @@ export async function buildMetrics(period: Period): Promise<MetricsResponse> {
       key: 'taps',
       label: 'Taps al link',
       value: curTaps,
-      delta: hasZernioKey() ? null : delta(curTaps, sum(previous, 'link_taps')),
-      description: hasZernioKey()
+      delta: isReal ? null : delta(curTaps, sum(previous, 'link_taps')),
+      description: isReal
         ? 'No disponible en esta fuente'
         : 'Clics al link de la bio',
       format: 'int',
@@ -137,7 +169,7 @@ export async function buildMetrics(period: Period): Promise<MetricsResponse> {
       label: 'CTR bio',
       value: curReach ? (curTaps / curReach) * 100 : 0,
       delta: null,
-      description: hasZernioKey() ? 'No disponible en esta fuente' : 'Taps / alcance',
+      description: isReal ? 'No disponible en esta fuente' : 'Taps / alcance',
       format: 'percent',
     },
     {
@@ -279,12 +311,23 @@ export async function buildMetrics(period: Period): Promise<MetricsResponse> {
     funnel,
     heatmap: heat,
     recentPosts: posts.slice(0, 8),
-    operation: {
-      active: 6,
-      ready: 3,
-      avgScore: 82,
-      blocked: 1,
-      publishable: 4,
-    },
+    operation: await buildOperation(ws),
+  };
+}
+
+// Estado real del pipeline de la cuenta. Antes eran cinco números fijos
+// heredados de la demo, así que una cuenta vacía presumía de "3 piezas listas".
+async function buildOperation(ws: Workspace): Promise<MetricsResponse['operation']> {
+  const pieces = await readFor<CalendarItem>(ws, 'calendar_items');
+  const scripts = await readFor<Script>(ws, 'scripts');
+  const scored = scripts.filter((s) => typeof s.score === 'number' && s.score > 0);
+  return {
+    active: pieces.filter((p) => p.status !== 'publicado').length,
+    ready: pieces.filter((p) => p.status === 'listo').length,
+    avgScore: scored.length
+      ? Math.round(scored.reduce((a, s) => a + s.score, 0) / scored.length)
+      : 0,
+    blocked: scored.filter((s) => s.score < 60).length,
+    publishable: scripts.filter((s) => s.status === 'aprobado').length,
   };
 }

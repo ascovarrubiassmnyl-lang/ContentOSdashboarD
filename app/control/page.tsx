@@ -21,7 +21,7 @@ import {
   StoriesCard,
   TopPosts,
 } from '@/components/control/widgets';
-import { IgAccount, MetricsResponse, Period } from '@/types';
+import { ConnectionResponse, MetricsResponse, Period } from '@/types';
 import { relativeTime } from '@/lib/utils';
 
 async function fetchMetrics(period: Period): Promise<MetricsResponse> {
@@ -30,10 +30,21 @@ async function fetchMetrics(period: Period): Promise<MetricsResponse> {
   return res.json();
 }
 
-async function fetchAccount(): Promise<{ account: IgAccount; demoMode: boolean }> {
+async function fetchAccount(): Promise<ConnectionResponse> {
   const res = await fetch('/api/connection');
   if (!res.ok) throw new Error('Error cargando cuenta');
   return res.json();
+}
+
+// El nombre de la cuenta sale del registro, no de un valor fijo. Si el nombre
+// visible ya es el propio usuario, no se repite el @usuario al lado.
+function displayName(conn?: ConnectionResponse): { title: string; handle: string | null } {
+  const label = conn?.workspace?.label ?? '';
+  const username = conn?.workspace?.username ?? conn?.account?.username ?? '';
+  if (!label && !username) return { title: 'Sin cuenta', handle: null };
+  if (!username) return { title: label, handle: null };
+  if (label.replace(/^@/, '') === username) return { title: `@${username}`, handle: null };
+  return { title: label, handle: `@${username}` };
 }
 
 export default function ControlPage() {
@@ -43,6 +54,7 @@ export default function ControlPage() {
     queryFn: () => fetchMetrics(period),
   });
   const { data: conn } = useQuery({ queryKey: ['connection'], queryFn: fetchAccount });
+  const name = displayName(conn);
 
   return (
     <div>
@@ -50,19 +62,21 @@ export default function ControlPage() {
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary via-pink to-orange flex items-center justify-center text-xl font-extrabold text-white shadow-glow">
-            S
+            {name.title.replace(/^@/, '').charAt(0).toUpperCase() || '·'}
           </div>
           <div>
             <h1 className="text-xl font-extrabold leading-tight">
-              Santiago Castro{' '}
-              <span className="text-muted font-semibold text-base">
-                @{conn?.account?.username ?? 'scav_86'}
-              </span>
+              {name.title}{' '}
+              {name.handle && (
+                <span className="text-muted font-semibold text-base">{name.handle}</span>
+              )}
             </h1>
             <p className="text-xs text-muted">
               {conn?.account
                 ? `Última actualización ${relativeTime(conn.account.last_sync_at)} · próxima sync mañana 7:00 a.m.`
-                : 'Cargando estado de conexión…'}
+                : conn
+                  ? 'Sin datos sincronizados todavía'
+                  : 'Cargando estado de conexión…'}
             </p>
           </div>
         </div>
@@ -84,6 +98,27 @@ export default function ControlPage() {
           </Link>
         </div>
       </div>
+
+      {/* ── Aviso cuando la cuenta activa no tiene datos ── */}
+      {conn && !conn.hasData && (
+        <div className="card border-orange/40 bg-orange/5 p-4 mb-6 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-orange shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-orange">
+              {conn.workspace.label} todavía no tiene métricas
+            </p>
+            <p className="text-xs text-muted mt-0.5">
+              {conn.syncError ??
+                'Su primera sincronización aún no ha entrado. Ve a Conexión IG y pulsa "Sincronizar ahora".'}
+            </p>
+            <Link href="/conexion">
+              <Button variant="secondary" className="!py-1.5 !text-xs mt-3">
+                Ir a Conexión IG
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* ── Mini-cards operativas ── */}
       <div className="grid grid-cols-12 gap-4 mb-6">

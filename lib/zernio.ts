@@ -6,20 +6,32 @@
 // Endpoints usados:
 //   GET /v1/accounts?platform=instagram   → cuentas conectadas
 //   GET /v1/analytics?accountId=..&fromDate=..&toDate=..  → analytics por post
-import { writeCollection, writeSingleton } from './db';
+import {
+  Workspace,
+  getZernioKey,
+  updateAccount,
+  writeFor,
+  writeSingletonFor,
+} from './accounts';
 import { IgAccount, MediaPost, MetricSnapshot } from '@/types';
 
 const BASE = process.env.ZERNIO_BASE_URL || 'https://api.zernio.com';
 
+// Solo indica si hay una key GLOBAL en el entorno (la de la cuenta original).
+// Para saber si una cuenta concreta puede sincronizar, usa hasZernioFor(ws).
 export function hasZernioKey(): boolean {
   return Boolean(process.env.ZERNIO_API_KEY);
 }
 
-async function zernioGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+async function zernioGet<T>(
+  apiKey: string,
+  path: string,
+  params: Record<string, string> = {}
+): Promise<T> {
   const url = `${BASE}${path}${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`;
   const res = await fetch(url, {
     headers: {
-      authorization: `Bearer ${process.env.ZERNIO_API_KEY}`,
+      authorization: `Bearer ${apiKey}`,
       accept: 'application/json',
     },
   });
@@ -33,6 +45,23 @@ async function zernioGet<T>(path: string, params: Record<string, string> = {}): 
   if (!res.ok) {
     const msg = (json as { message?: string; error?: string })?.message ??
       (json as { error?: string })?.error ?? res.statusText;
+    // 402 = la cuenta de Zernio dueña de esta API key está en un plan ANTIGUO,
+    // de cuando Analytics era un add-on de pago. Zernio ya eliminó los planes
+    // por niveles (analytics incluido, 2 cuentas gratis), pero las cuentas
+    // viejas se quedan como estaban hasta que cambian de plan a mano.
+    if (res.status === 402) {
+      throw new Error(
+        'La cuenta de Zernio dueña de esta API key está en un plan antiguo, donde Analytics ' +
+          'era un add-on de pago. Ya no existe ese add-on: Zernio incluye analytics y da 2 ' +
+          'cuentas gratis, pero hay que pasarse al plan nuevo desde su panel. Lo más simple ' +
+          'es conectar esta cuenta de Instagram en la MISMA cuenta de Zernio que ya usas.'
+      );
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(
+        `Zernio rechazó la API key (${res.status}). Revisa que sea la correcta y que siga activa.`
+      );
+    }
     throw new Error(`Zernio API ${res.status}: ${msg}`);
   }
   return json as T;
@@ -84,21 +113,42 @@ interface ZernioPost {
   platforms?: { platformPostId?: string; platformPostUrl?: string; analytics?: ZernioAnalyticsBlock }[];
 }
 
-export async function listInstagramAccounts(): Promise<ZernioAccount[]> {
-  const res = await zernioGet<{ accounts?: ZernioAccount[] }>('/v1/accounts', {
+export async function listInstagramAccounts(apiKey: string): Promise<ZernioAccount[]> {
+  const res = await zernioGet<{ accounts?: ZernioAccount[] }>(apiKey, '/v1/accounts', {
     platform: 'instagram',
   });
   return res.accounts ?? [];
 }
 
+// Resumen ligero de una cuenta de Zernio, para el flujo "añadir cuenta".
+export interface ZernioAccountOption {
+  id: string;
+  username: string;
+  displayName: string;
+  followers: number;
+  avatarUrl: string | null;
+}
+
+export function toAccountOption(a: ZernioAccount): ZernioAccountOption {
+  const p = a.metadata?.profileData;
+  return {
+    id: a._id,
+    username: p?.username ?? a.username ?? a.displayName ?? 'instagram',
+    displayName: p?.displayName ?? a.displayName ?? '',
+    followers: a.followersCount ?? p?.followersCount ?? 0,
+    avatarUrl: p?.profileUrl ?? null,
+  };
+}
+
 async function fetchAllPosts(
+  apiKey: string,
   accountId: string,
   fromDate: string,
   toDate: string
 ): Promise<ZernioPost[]> {
   const all: ZernioPost[] = [];
   for (let page = 1; page <= 20; page++) {
-    const res = await zernioGet<{ posts?: ZernioPost[] }>('/v1/analytics', {
+    const res = await zernioGet<{ posts?: ZernioPost[] }>(apiKey, '/v1/analytics', {
       accountId,
       platform: 'instagram',
       fromDate,
@@ -195,18 +245,44 @@ function buildDailySnapshots(posts: MediaPost[], accountId: string, followers: n
   return snapshots.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
 }
 
-// ── Sync completo desde Zernio ──────────────────────────────
-export async function syncFromZernio(): Promise<{
+// ── Sync completo desde Zernio, para UNA cuenta ─────────────
+// Cada cuenta trae su propia API key y su propio ID dentro de Zernio, así que
+// los datos se escriben en las colecciones con el namespace de esa cuenta.
+export async function syncFromZernio(ws: Workspace): Promise<{
   account: string;
   postsSynced: number;
   followers: number;
 }> {
-  const accounts = await listInstagramAccounts();
-  const ig = accounts.find((a) => a.enabled !== false && a.isActive !== false) ?? accounts[0];
-  if (!ig) {
+  const apiKey = await getZernioKey(ws);
+  if (!apiKey) {
+    throw new Error(
+      `${ws.label} no tiene una API key de Zernio configurada. Añádela en Conexión.`
+    );
+  }
+
+  const accounts = await listInstagramAccounts(apiKey);
+  if (accounts.length === 0) {
     throw new Error(
       'No hay ninguna cuenta de Instagram conectada en Zernio. Conéctala primero en su dashboard.'
     );
+  }
+
+  // Si el workspace apunta a una cuenta concreta de Zernio, tiene que ser ESA.
+  // Caer a "la primera activa" cuando no aparece sería catastrófico en
+  // multicuenta: sobrescribiría los datos de una cuenta con los de otra.
+  let ig;
+  if (ws.zernio_account_id) {
+    ig = accounts.find((a) => a._id === ws.zernio_account_id);
+    if (!ig) {
+      throw new Error(
+        `Esta API key de Zernio no contiene la cuenta @${ws.username || ws.label}. ` +
+          `Contiene: ${accounts.map((a) => '@' + (a.metadata?.profileData?.username ?? a.username ?? '?')).join(', ')}. ` +
+          'Si moviste la cuenta a otra cuenta de Zernio, elimínala aquí y vuelve a añadirla con la key correcta.'
+      );
+    }
+  } else {
+    // Solo la cuenta original (creada antes del multicuenta) llega sin id.
+    ig = accounts.find((a) => a.enabled !== false && a.isActive !== false) ?? accounts[0];
   }
 
   const username = ig.metadata?.profileData?.username ?? ig.username ?? ig.displayName ?? 'instagram';
@@ -215,6 +291,7 @@ export async function syncFromZernio(): Promise<{
   const to = new Date();
   const from = new Date(Date.now() - 90 * 86400_000);
   const rawPosts = await fetchAllPosts(
+    apiKey,
     ig._id,
     from.toISOString().slice(0, 10),
     to.toISOString().slice(0, 10)
@@ -224,22 +301,32 @@ export async function syncFromZernio(): Promise<{
     .map((p) => mapPost(p, ig._id))
     .filter((p) => p.ig_media_id)
     .sort((a, b) => b.published_at.localeCompare(a.published_at));
-  await writeCollection('media_posts', posts);
+  await writeFor(ws, 'media_posts', posts);
 
   const snapshots = buildDailySnapshots(posts, ig._id, followers);
-  await writeCollection('metric_snapshots', snapshots);
-  await writeCollection('stories', []); // Zernio no expone historias en este plan
+  await writeFor(ws, 'metric_snapshots', snapshots);
+  await writeFor(ws, 'stories', []); // Zernio no expone historias en este plan
 
+  const syncedAt = new Date().toISOString();
   const account: IgAccount = {
-    id: 'acc_' + ig._id,
+    id: ws.id,
     ig_user_id: ig._id,
     username,
     account_type: 'MEDIA_CREATOR',
     token_expires_at: new Date(Date.now() + 60 * 86400_000).toISOString(),
-    last_sync_at: new Date().toISOString(),
+    last_sync_at: syncedAt,
     connected: true,
   };
-  await writeSingleton('account', account);
+  await writeSingletonFor(ws, 'account', account);
+
+  // El registro de cuentas guarda lo que necesita el selector del menú.
+  await updateAccount(ws.id, {
+    username,
+    followers,
+    last_sync_at: syncedAt,
+    zernio_account_id: ig._id,
+    avatar_url: ig.metadata?.profileData?.profileUrl ?? ws.avatar_url,
+  });
 
   return { account: username, postsSynced: posts.length, followers };
 }

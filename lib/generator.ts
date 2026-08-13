@@ -1,5 +1,5 @@
 import { MediaPost, Script, ScriptFormat, Source } from '@/types';
-import { readCollection } from './db';
+import { Workspace, readFor } from './accounts';
 import { buildMetrics } from './metrics';
 import { askClaude, askClaudeMessages, ChatTurn, hasClaudeKey } from './claude';
 import { buildFrameworkDemo, frameworksPrompt, pickFramework } from './frameworks';
@@ -26,8 +26,8 @@ interface GeneratedScript {
   metrics_context: Record<string, unknown>;
 }
 
-async function topAndWorstPosts() {
-  const posts = await readCollection<MediaPost>('media_posts');
+async function topAndWorstPosts(ws: Workspace) {
+  const posts = await readFor<MediaPost>(ws, 'media_posts');
   const scored = posts.map((p) => ({
     ...p,
     eng: p.likes + p.comments + p.saves + p.shares,
@@ -37,11 +37,11 @@ async function topAndWorstPosts() {
   return { top, worst };
 }
 
-async function buildContext(input: GenerateInput) {
-  const metrics = await buildMetrics('30d');
-  const { top, worst } = await topAndWorstPosts();
+async function buildContext(ws: Workspace, input: GenerateInput) {
+  const metrics = await buildMetrics(ws, '30d');
+  const { top, worst } = await topAndWorstPosts(ws);
 
-  const allSources = await readCollection<Source>('sources');
+  const allSources = await readFor<Source>(ws, 'sources');
   // Si useAllSources: todo el banco como base de conocimiento.
   // Si no: solo las fuentes seleccionadas.
   const sources = (
@@ -88,12 +88,20 @@ async function buildContext(input: GenerateInput) {
   };
 }
 
-const SYSTEM_PROMPT = `Eres el guionista de cabecera de Santiago Castro (@scav_86), creador de contenido sobre creación de contenido y análisis de métricas. Escribes guiones en español, directos, sin relleno, con hooks que detienen el scroll en menos de 3 segundos. Usas los datos reales de su cuenta para justificar cada decisión creativa. Respondes SIEMPRE en JSON válido con esta forma exacta:
+// Identidad de la cuenta activa para los prompts (multicuenta).
+function who(ws: Workspace): string {
+  return ws.username ? `${ws.label} (@${ws.username})` : ws.label;
+}
+
+const systemPrompt = (who: string) => `Eres el guionista de cabecera de ${who}, creador de contenido. Escribes guiones en español, directos, sin relleno, con hooks que detienen el scroll en menos de 3 segundos. Usas los datos reales de su cuenta para justificar cada decisión creativa. Respondes SIEMPRE en JSON válido con esta forma exacta:
 {"title": "...", "hook": "...", "body": "...", "cta": "...", "justification": "..."}
 El body debe estar estructurado por bloques con saltos de línea. La justification explica qué dato real respalda el hook y el enfoque.`;
 
-export async function generateScript(input: GenerateInput): Promise<GeneratedScript> {
-  const { metrics, top, sources, contextText } = await buildContext(input);
+export async function generateScript(
+  ws: Workspace,
+  input: GenerateInput
+): Promise<GeneratedScript> {
+  const { metrics, top, sources, contextText } = await buildContext(ws, input);
   const metricsContext = {
     engagement_rate: metrics.engagementRate,
     avg_watch_time: metrics.avgWatchTime,
@@ -105,7 +113,7 @@ export async function generateScript(input: GenerateInput): Promise<GeneratedScr
     const user = `Genera un guion de ${input.format} con objetivo de ${input.objective}, tono ${input.tone}.${
       input.topic ? ` Tema solicitado: ${input.topic}.` : ''
     }\n\nEl body DEBE seguir los pasos exactos de uno de los 7 Frameworks de Guiones Virales (elige el más adecuado):\n${frameworksPrompt()}\n\n${contextText}`;
-    const raw = await askClaude(SYSTEM_PROMPT, user);
+    const raw = await askClaude(systemPrompt(who(ws)), user);
     const parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
     const score = await scoreScript(parsed.hook, parsed.body, parsed.cta, input.format);
     return { ...parsed, score, metrics_context: metricsContext };
@@ -189,9 +197,9 @@ function scoreScriptLocal(hook: string, body: string, input: GenerateInput): num
 // ── Chat conversacional del generador ──────────────────────
 // Usa SIEMPRE todo el banco de fuentes + métricas reales como contexto.
 
-const CHAT_SYSTEM = `Eres el guionista de cabecera de Santiago Castro (@scav_86), creador de contenido sobre disciplina, mentalidad y creación de contenido. Escribes en español, directo y sin relleno, con hooks que frenan el scroll en menos de 3 segundos.
+const chatSystem = (who: string) => `Eres el guionista de cabecera de ${who}. Escribes en español, directo y sin relleno, con hooks que frenan el scroll en menos de 3 segundos.
 
-METODOLOGÍA OBLIGATORIA — los 7 Frameworks de Guiones Virales (guía propia de Santiago):
+METODOLOGÍA OBLIGATORIA — los 7 Frameworks de Guiones Virales:
 - TODO guion que escribas DEBE seguir uno de los 7 frameworks (abajo tienes la referencia completa con pasos y frases ejemplo).
 - Elige el framework según la intención del pedido (o el que el usuario nombre explícitamente: "framework 3", "VSL", "epifanía", etc.). Usa la guía de tono/ritmo y las combinaciones estratégicas cuando aplique.
 - Estructura el cuerpo del guion siguiendo los pasos EXACTOS del framework elegido, en orden, con cada bloque etiquetado con el nombre del paso.
@@ -225,10 +233,14 @@ function inferObjective(message: string): GenerateInput['objective'] {
   return 'alcance';
 }
 
-export async function chatReply(message: string, history: ChatTurn[] = []): Promise<string> {
+export async function chatReply(
+  ws: Workspace,
+  message: string,
+  history: ChatTurn[] = []
+): Promise<string> {
   const format = inferFormat(message);
   const objective = inferObjective(message);
-  const { metrics, top, sources, contextText } = await buildContext({
+  const { metrics, top, sources, contextText } = await buildContext(ws, {
     format,
     objective,
     tone: 'directo y sin relleno',
@@ -238,7 +250,7 @@ export async function chatReply(message: string, history: ChatTurn[] = []): Prom
   });
 
   if (hasClaudeKey()) {
-    const system = `${CHAT_SYSTEM}\n\n${frameworksPrompt()}\n\n=== CONTEXTO REAL (datos de su cuenta y banco de fuentes) ===\n${contextText}`;
+    const system = `${chatSystem(who(ws))}\n\n${frameworksPrompt()}\n\n=== CONTEXTO REAL (datos de su cuenta y banco de fuentes) ===\n${contextText}`;
     const turns: ChatTurn[] = [...history.slice(-8), { role: 'user', content: message }];
     return askClaudeMessages(system, turns, 2200);
   }

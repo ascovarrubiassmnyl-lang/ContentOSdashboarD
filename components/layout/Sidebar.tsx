@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import AccountSwitcher from './AccountSwitcher';
 
 const clientViews: { href: string | null; label: string; icon: typeof Home }[] = [
   { href: '/resumen', label: 'Resumen', icon: Home },
@@ -101,12 +102,12 @@ export default function Sidebar({
         open ? 'translate-x-0' : '-translate-x-full'
       )}
     >
-      <div className="px-5 py-6 flex items-start justify-between">
+      <div className="px-5 pt-6 pb-4 flex items-start justify-between">
         <div>
           <p className="text-lg font-extrabold tracking-tight">
             Content <span className="text-primary">OS</span>
           </p>
-          <p className="text-[11px] text-muted mt-0.5">Command Center · @scav_86</p>
+          <p className="text-[11px] text-muted mt-0.5">Command Center</p>
         </div>
         <button
           onClick={onClose}
@@ -116,6 +117,7 @@ export default function Sidebar({
           <X size={15} />
         </button>
       </div>
+      <AccountSwitcher onNavigate={onClose} />
       <div className="flex-1 overflow-y-auto px-3">
         <NavGroup
           title="Vistas para el cliente"
