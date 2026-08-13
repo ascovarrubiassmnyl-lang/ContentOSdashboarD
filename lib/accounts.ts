@@ -210,11 +210,20 @@ export async function getZernioKey(ws: Workspace): Promise<string | null> {
   const secrets = await readSecrets();
   const blob = secrets[ws.id];
   if (blob) {
+    // Falta la variable y "no coincide la variable" son problemas distintos y
+    // se arreglan distinto: merece la pena decir cuál de los dos es.
+    if (!hasEncryptionKey()) {
+      throw new Error(
+        `Este servidor no tiene ENCRYPTION_KEY, así que no puede leer la API key guardada de ${ws.label}. ` +
+          'Añádela a las variables de entorno del servidor (la MISMA con la que se guardó la key) y vuelve a desplegar.'
+      );
+    }
     try {
       return await decryptSecret(blob);
     } catch {
       throw new Error(
-        `No se pudo descifrar la API key de ${ws.label}. ¿Cambió ENCRYPTION_KEY? Vuelve a añadir la key desde Conexión.`
+        `La ENCRYPTION_KEY de este servidor no es la que cifró la API key de ${ws.label}. ` +
+          'Pon la key original, o vuelve a pegar la API key de Zernio desde Conexión para regrabarla con la actual.'
       );
     }
   }
