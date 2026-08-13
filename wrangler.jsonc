@@ -3,9 +3,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dashboardscav",
-  "main": ".open-next/worker.js",
+  // Entrypoint propio que envuelve el worker de OpenNext para añadirle el
+  // handler `scheduled` del cron. Ver custom-worker.js.
+  "main": "custom-worker.js",
   "compatibility_date": "2025-03-25",
   "compatibility_flags": ["nodejs_compat"],
+  // Sincronización diaria de todas las cuentas + purga del calendario.
+  // 13:00 UTC = 7:00 a.m. en CDMX (UTC-6) · 8:00 a.m. en Bogotá (UTC-5).
+  "triggers": {
+    "crons": ["0 13 * * *"]
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
