@@ -98,33 +98,62 @@ export async function generateReport(
       )
       .join('\n')}`;
     summary = await askClaude(reportSystem(ws.username ? `${ws.label} (@${ws.username})` : ws.label), dataBlock, 2500);
+  } else if (cur.reach === 0 && cur.views === 0 && cur.interactions === 0 && topPosts.length === 0) {
+    // Periodo sin un solo dato. Antes se generaba igualmente el informe
+    // completo, con ceros y frases afirmativas ("los guardados confirman
+    // que…"): un documento que parecía un análisis y no lo era.
+    summary = `## Resumen ejecutivo
+
+**No hay datos para el periodo ${periodStart} – ${periodEnd}.** No se registraron publicaciones ni métricas en esa ventana, así que no hay nada que analizar.
+
+## Posibles causas
+
+- La cuenta no publicó nada en esas fechas.
+- Todavía no se ha sincronizado con Instagram: ve a **Conexión IG** y pulsa *Sincronizar ahora*.
+- El periodo es anterior a los datos disponibles (Zernio entrega los últimos 90 días).
+
+---
+*Reporte sin datos — deliberadamente no se ha estimado ni redondeado ninguna cifra.*`;
   } else {
     const arrow = (d: number | null) =>
       d === null ? '—' : d >= 0 ? `▲ +${d}%` : `▼ ${d}%`;
+    const interactionsLine =
+      comparison.interactions.delta === null
+        ? `Las interacciones sumaron **${cur.interactions.toLocaleString('es-CO')}** (sin periodo anterior con el que comparar).`
+        : `Las interacciones ${
+            comparison.interactions.delta >= 0 ? 'crecieron' : 'cayeron'
+          } ${arrow(comparison.interactions.delta)}.`;
+
     summary = `## Resumen ejecutivo
 
 Entre **${periodStart}** y **${periodEnd}** la cuenta alcanzó **${cur.reach.toLocaleString(
       'es-CO'
     )} cuentas** (${arrow(comparison.reach.delta)} vs periodo anterior) con **${cur.views.toLocaleString(
       'es-CO'
-    )} vistas** y un neto de **${cur.gained - cur.lost} seguidores nuevos**. Las interacciones ${
-      (comparison.interactions.delta ?? 0) >= 0 ? 'crecieron' : 'cayeron'
-    } ${arrow(comparison.interactions.delta)}.
+    )} vistas** y un neto de **${cur.gained - cur.lost} seguidores nuevos**. ${interactionsLine}
 
 ## Qué funcionó
 
-${topPosts
-  .map(
-    (p, i) =>
-      `${i + 1}. **"${p.hook}"** (${p.media_type.toLowerCase()}) — ${
-        p.likes + p.comments + p.saves + p.shares
-      } interacciones, ${p.reach.toLocaleString('es-CO')} de alcance.`
-  )
-  .join('\n')}
+${
+  topPosts.length > 0
+    ? topPosts
+        .map(
+          (p, i) =>
+            `${i + 1}. **"${p.hook}"** (${p.media_type.toLowerCase()}) — ${
+              p.likes + p.comments + p.saves + p.shares
+            } interacciones, ${p.reach.toLocaleString('es-CO')} de alcance.`
+        )
+        .join('\n')
+    : '- No hubo publicaciones en este periodo, así que el alcance viene de contenido anterior.'
+}
 
-Los guardados del periodo (${cur.saves.toLocaleString(
-      'es-CO'
-    )}, ${arrow(comparison.saves.delta)}) confirman que el contenido de valor accionable sigue siendo el motor de la cuenta.
+${
+  cur.saves > 0
+    ? `Los guardados del periodo (${cur.saves.toLocaleString('es-CO')}, ${arrow(
+        comparison.saves.delta
+      )}) confirman que el contenido de valor accionable sigue siendo el motor de la cuenta.`
+    : 'Sin guardados registrados en el periodo: es la señal que más conviene levantar en las próximas piezas.'
+}
 
 ## Qué cayó
 
@@ -143,7 +172,11 @@ ${
 
 ## Recomendaciones concretas
 
-1. **Duplicar el patrón del top 1**: "${topPosts[0]?.hook ?? '—'}" — grabar 2 variaciones del mismo ángulo esta semana.
+1. ${
+  topPosts[0]
+    ? `**Duplicar el patrón del top 1**: "${topPosts[0].hook}" — grabar 2 variaciones del mismo ángulo esta semana.`
+    : '**Volver a publicar**: no hubo piezas en el periodo, así que no hay patrón ganador que duplicar.'
+}
 2. **Programar en los horarios pico** detectados en el heatmap del dashboard (revisar sección Control).
 3. **Convertir guardados en seguidores**: añadir CTA de seguimiento en los 3 posts con más guardados del periodo.
 

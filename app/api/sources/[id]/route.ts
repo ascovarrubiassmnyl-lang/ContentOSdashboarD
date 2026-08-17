@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { activeWorkspace, readFor, writeFor } from '@/lib/accounts';
+import { deleteUpload } from '@/lib/files';
 import { Source } from '@/types';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -38,10 +39,19 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   const ws = await activeWorkspace();
   const sources = await readFor<Source>(ws, 'sources');
+  const target = sources.find((s) => s.id === id);
   await writeFor(
     ws,
     'sources',
     sources.filter((s) => s.id !== id)
   );
+  // El registro se iba pero el archivo subido se quedaba en el almacenamiento.
+  if (target?.file_url) {
+    try {
+      await deleteUpload(id);
+    } catch {
+      // El borrado del archivo no debe tumbar la petición: la fuente ya no está.
+    }
+  }
   return NextResponse.json({ ok: true });
 }

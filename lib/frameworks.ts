@@ -354,7 +354,12 @@ export function buildFrameworkDemo(
     'Contexto / Setup': `Sitúa la escena en 5s: dónde estabas tú (o tu audiencia) respecto a ${data.topic}.`,
     'Conflicto / Caída': `El momento de dolor real${data.sourceInsight ? ` — usa este insight de tu banco: "${data.sourceInsight.slice(0, 100)}…"` : ''}.`,
     'Cambio / Insight': `"Fue entonces cuando entendí que el problema no era el esfuerzo, sino la estructura."`,
-    'Resolución / Resultado': `Tu resultado real: ER del ${data.er}% y piezas reteniendo ${data.avgWatch}s.`,
+    // Con la cuenta sin sincronizar, `er` y `avgWatch` son 0: presentarlos
+    // como "tu resultado real" sería afirmar un dato que no existe.
+    'Resolución / Resultado':
+      data.er > 0 || data.avgWatch > 0
+        ? `Tu resultado real: ER del ${data.er}% y piezas reteniendo ${data.avgWatch}s.`
+        : 'El resultado concreto que consigues al aplicarlo — mídelo con tus próximas 3 piezas.',
     'Cierre Circular o Frase Viral': `"No hay viralidad sin estructura, ni estructura sin emoción."`,
     Contexto: `"El problema no está en publicar más — está en cómo estructuras ${data.topic}."`,
     Enseñanza: `"La clave: cada video entrega UNA microtransformación (Quick Win), no todo el proceso."`,

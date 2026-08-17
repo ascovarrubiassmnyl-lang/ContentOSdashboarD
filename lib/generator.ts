@@ -120,33 +120,64 @@ export async function generateScript(
   }
 
   // ── Generador demo (sin API key) — usa los datos reales del dashboard ──
-  const bestHook = top[0]?.hook ?? 'La métrica que deberías mirar primero';
+  // Sin historial NO se puede citar "tu top post": antes se rellenaba con un
+  // hook de los datos de demostración y el guion lo presentaba como dato real
+  // de la cuenta. Ahora, si no hay historial, el guion lo dice y no inventa.
+  const realHook = top[0]?.hook ?? null;
+  const hasMetrics = metrics.avgWatchTime > 0 || metrics.engagementRate > 0;
+  const bestHook = realHook ?? 'El error que te está costando alcance';
   const sourceInsight = sources[0]?.content.slice(0, 140) ?? '';
   const topicLabel = input.topic || 'por qué tu contenido no retiene';
 
   const formats: Record<ScriptFormat, { title: string; body: string }> = {
     reel: {
       title: `Reel — ${topicLabel}`,
-      body: `[0-3s — HOOK EN CÁMARA]\nMirada directa, sin intro: el hook completo en pantalla.\n\n[3-8s — TENSIÓN]\n"Tu mejor contenido está retenido en promedio ${metrics.avgWatchTime}s. El problema no es el algoritmo — es lo que pasa en el segundo 4."\n\n[8-20s — VALOR]\nTres cortes rápidos:\n1. Muestra el dato real (captura del dashboard).\n2. El patrón de tus top posts: "${bestHook}" funcionó porque promete algo específico.\n3. La corrección concreta: reescribe el hook ANTES de grabar, no después.\n\n[20-28s — PRUEBA]\n"Esto salió de mis propios datos: ER del ${metrics.engagementRate}% en 30 días haciéndolo así."${
-        sourceInsight ? `\n\n[Contexto de audiencia]\n"${sourceInsight}…"` : ''
-      }`,
+      body: `[0-3s — HOOK EN CÁMARA]\nMirada directa, sin intro: el hook completo en pantalla.\n\n[3-8s — TENSIÓN]\n${
+        hasMetrics
+          ? `"Tu mejor contenido está retenido en promedio ${metrics.avgWatchTime}s. El problema no es el algoritmo — es lo que pasa en el segundo 4."`
+          : `"El problema no es el algoritmo — es lo que pasa en el segundo 4."`
+      }\n\n[8-20s — VALOR]\nTres cortes rápidos:\n1. ${
+        hasMetrics
+          ? 'Muestra el dato real (captura del dashboard).'
+          : 'Muestra el problema con un ejemplo concreto en pantalla.'
+      }\n2. ${
+        realHook
+          ? `El patrón de tus top posts: "${realHook}" funcionó porque promete algo específico.`
+          : 'El patrón que sí funciona: prometer algo específico y medible, no genérico.'
+      }\n3. La corrección concreta: reescribe el hook ANTES de grabar, no después.\n\n[20-28s — PRUEBA]\n${
+        hasMetrics
+          ? `"Esto salió de mis propios datos: ER del ${metrics.engagementRate}% en 30 días haciéndolo así."`
+          : `"Pruébalo 7 días y compara la retención con la de tus últimos 3 videos."`
+      }${sourceInsight ? `\n\n[Contexto de audiencia]\n"${sourceInsight}…"` : ''}`,
     },
     carrusel: {
       title: `Carrusel — ${topicLabel}`,
-      body: `SLIDE 1 (portada): El hook en tipografía gigante sobre fondo oscuro.\n\nSLIDE 2: El error — publicar sin revisar qué retuvo la última vez.\n\nSLIDE 3: El dato — retención media de ${metrics.avgWatchTime}s en reels; el 70% se decide antes del segundo 3.\n\nSLIDE 4: El patrón ganador — "${bestHook}" (tu top post real).\n\nSLIDE 5: Checklist accionable — 3 preguntas antes de publicar.\n\nSLIDE 6: CTA con instrucción única.`,
+      body: `SLIDE 1 (portada): El hook en tipografía gigante sobre fondo oscuro.\n\nSLIDE 2: El error — publicar sin revisar qué retuvo la última vez.\n\nSLIDE 3: El dato — ${
+        hasMetrics
+          ? `retención media de ${metrics.avgWatchTime}s en reels; el 70% se decide antes del segundo 3.`
+          : 'el 70% del scroll se decide antes del segundo 3.'
+      }\n\nSLIDE 4: El patrón ganador — ${
+        realHook ? `"${realHook}" (tu top post real).` : 'un hook que promete algo específico y medible.'
+      }\n\nSLIDE 5: Checklist accionable — 3 preguntas antes de publicar.\n\nSLIDE 6: CTA con instrucción única.`,
     },
     historia: {
       title: `Historia — ${topicLabel}`,
-      body: `FRAME 1: Pregunta directa con sticker de encuesta — "¿Revisas tus métricas antes de crear?"\n\nFRAME 2: Dato en pantalla — captura del dashboard con el ER del ${metrics.engagementRate}%.\n\nFRAME 3: Micro-lección de 15 segundos en cámara.\n\nFRAME 4: CTA con caja de preguntas.`,
+      body: `FRAME 1: Pregunta directa con sticker de encuesta — "¿Revisas tus métricas antes de crear?"\n\nFRAME 2: ${
+        hasMetrics
+          ? `Dato en pantalla — captura del dashboard con el ER del ${metrics.engagementRate}%.`
+          : 'Dato en pantalla — el 70% del scroll se decide antes del segundo 3.'
+      }\n\nFRAME 3: Micro-lección de 15 segundos en cámara.\n\nFRAME 4: CTA con caja de preguntas.`,
     },
   };
 
   const f = formats[input.format];
   const script: GeneratedScript = {
     title: f.title,
-    hook: bestHook.includes('métrica')
-      ? `Deja de culpar al algoritmo: tus datos ya te dijeron qué publicar`
-      : `${bestHook} (versión ${new Date().getFullYear()})`,
+    hook: !realHook
+      ? 'Deja de publicar a ciegas: esto decide si te ven o no'
+      : realHook.includes('métrica')
+        ? `Deja de culpar al algoritmo: tus datos ya te dijeron qué publicar`
+        : `${realHook} (versión ${new Date().getFullYear()})`,
     body: f.body,
     cta:
       input.objective === 'clics'
@@ -154,7 +185,15 @@ export async function generateScript(
         : input.objective === 'engagement'
         ? 'Guárdalo para tu próxima sesión de creación y cuéntame en comentarios cuál es tu retención media.'
         : 'Compártelo con un creador que siga publicando a ciegas.',
-    justification: `Hook derivado de tu top post real ("${bestHook}", el de mayor interacción en 30 días). El objetivo "${input.objective}" se ataca con el CTA elegido; el cuerpo usa tu retención media real (${metrics.avgWatchTime}s) como gancho de autoridad. ${
+    justification: `${
+      realHook
+        ? `Hook derivado de tu top post real ("${realHook}", el de mayor interacción en 30 días).`
+        : 'Esta cuenta aún no tiene posts sincronizados, así que el guion sale de la estructura del framework y NO de tu historial: revísalo antes de grabar.'
+    } El objetivo "${input.objective}" se ataca con el CTA elegido.${
+      hasMetrics
+        ? ` El cuerpo usa tu retención media real (${metrics.avgWatchTime}s) como gancho de autoridad.`
+        : ''
+    } ${
       sources.length > 0
         ? `Incorpora la fuente "${sources[0].title}" como insight de audiencia.`
         : 'Sin fuentes seleccionadas — considera añadir una objeción real para más especificidad.'
@@ -270,7 +309,9 @@ export async function chatReply(
     .slice(0, 100)
     .trim();
   const demo = buildFrameworkDemo(fw, format, {
-    topHook: top[0]?.hook ?? 'La métrica que deberías mirar primero',
+    // Sin historial no se cita ningún hook de la cuenta (antes se colaba uno
+    // de los datos de demostración como si fuera suyo).
+    topHook: top[0]?.hook ?? 'El error que te está costando alcance',
     avgWatch: metrics.avgWatchTime,
     er: metrics.engagementRate,
     topic: topic || 'tu contenido',

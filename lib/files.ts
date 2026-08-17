@@ -30,6 +30,25 @@ export async function saveUpload(
   fs.writeFileSync(path.join(UPLOAD_DIR, stored), buffer);
 }
 
+// Borra el archivo asociado a una fuente. Sin esto, eliminar una fuente (o
+// una cuenta entera) dejaba el documento subido en el almacenamiento para
+// siempre: además de ocupar espacio, conserva material de un cliente que ya
+// se dio de baja.
+export async function deleteUpload(id: string): Promise<void> {
+  if (isSupabaseConfigured()) {
+    const { data: list } = await supabaseAdmin()
+      .storage.from(BUCKET)
+      .list('', { search: `${id}_` });
+    const names = (list ?? []).filter((f) => f.name.startsWith(`${id}_`)).map((f) => f.name);
+    if (names.length) await supabaseAdmin().storage.from(BUCKET).remove(names);
+    return;
+  }
+  if (!fs.existsSync(UPLOAD_DIR)) return;
+  for (const f of fs.readdirSync(UPLOAD_DIR)) {
+    if (f.startsWith(`${id}_`)) fs.unlinkSync(path.join(UPLOAD_DIR, f));
+  }
+}
+
 export async function findUpload(
   id: string
 ): Promise<{ name: string; buffer: Buffer } | null> {
