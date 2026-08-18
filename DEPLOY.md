@@ -1,7 +1,70 @@
-# Deploy a producción — Cloudflare
+# Deploy a producción
 
 Guía para llevar Content OS a producción. El código ya está preparado: la app
 detecta las variables de entorno y cambia sola de modo local a producción.
+
+Hay dos destinos soportados. **Railway** es el recomendado: corre Next.js tal
+cual, sin adaptadores. Cloudflare Workers sigue funcionando y su guía está más
+abajo.
+
+---
+
+# A) Railway (recomendado)
+
+Next.js se ejecuta nativo en Node: sin OpenNext, sin `custom-worker.js` y sin
+el límite de 50 subrequests por petición que tiene Workers.
+
+**No hay que migrar datos.** Todo el estado vive en Supabase; Railway solo
+ejecuta el código.
+
+## Servicio 1 — la app web
+
+1. railway.app → **New Project → Deploy from GitHub repo** → este repo.
+2. Railway detecta `railway.json` y usa `npm run build` + `npm start`.
+   `next start` lee el `PORT` que inyecta Railway.
+3. **Variables** — añade las mismas que en local:
+
+   | Variable | Nota |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | |
+   | `SUPABASE_SERVICE_ROLE_KEY` | secreta |
+   | `ZERNIO_API_KEY` | key de la cuenta original |
+   | `ENCRYPTION_KEY` | ⚠️ **la MISMA de `.env.local`** — si cambia, las API keys de Zernio guardadas dejan de descifrarse |
+   | `CRON_SECRET` | |
+   | `ANTHROPIC_API_KEY` | opcional, activa la IA real |
+
+4. **Settings → Networking → Generate Domain** para obtener la URL pública.
+5. Comprueba `https://<tu-url>/api/health`: debe responder `ok: true` y mostrar
+   `supabase`, `zernio`, `encryption` y `cron` en `true`.
+
+## Servicio 2 — el cron diario
+
+Railway no tiene handler `scheduled`: el cron es un servicio aparte que arranca,
+llama al endpoint y termina.
+
+1. En el MISMO proyecto: **New → GitHub Repo** → el mismo repo.
+2. **Settings → Config-as-code**: `railway.cron.json`.
+3. **Settings → Cron Schedule**: `0 13 * * *` (13:00 UTC = 7:00 a.m. CDMX).
+4. **Variables** de ese servicio:
+   - `APP_URL` → la URL pública del servicio 1, sin barra final
+   - `CRON_SECRET` → el mismo del servicio 1
+5. Pruébalo con **Deploy** manual: en los logs debe salir
+   `[cron] OK en …ms — {"ok":true,"accounts":2,…}`.
+
+Si falla, el script sale con código 1 y Railway marca la ejecución como fallida
+en lugar de aparentar que fue bien.
+
+## Cambiar el dominio
+
+Mientras validas Railway puedes dejar Cloudflare corriendo: son independientes y
+comparten la misma base de datos. Cuando Railway responda bien, apunta tu dominio
+allí y desactiva el Cron Trigger de Cloudflare (`triggers.crons` en
+`wrangler.jsonc`) para que no sincronicen los dos a la vez.
+
+---
+
+# B) Cloudflare Workers
 
 ## Requisitos previos (cuentas)
 

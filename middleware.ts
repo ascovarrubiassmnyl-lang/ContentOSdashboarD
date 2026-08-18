@@ -4,7 +4,9 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 
-const PUBLIC_PREFIXES = ['/login', '/auth', '/api/auth', '/api/cron'];
+// /api/health debe seguir siendo público aunque se active el login: si no,
+// el healthcheck del hosting fallaría y el despliegue no arrancaría nunca.
+const PUBLIC_PREFIXES = ['/login', '/auth', '/api/auth', '/api/cron', '/api/health'];
 
 export async function middleware(req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
