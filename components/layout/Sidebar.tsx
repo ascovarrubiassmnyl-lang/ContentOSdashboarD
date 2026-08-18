@@ -92,12 +92,10 @@ export default function Sidebar({
   return (
     <aside
       className={cn(
-        // Anclada a la DERECHA: borde a la izquierda y, en móvil, el drawer
-        // sale escondido hacia ese mismo lado (translate positivo).
-        'fixed right-0 top-0 h-dvh md:h-screen w-60 border-l border-line bg-[#0C0C15] flex flex-col z-50',
+        'fixed left-0 top-0 h-dvh md:h-screen w-60 border-r border-line bg-[#0C0C15] flex flex-col z-50',
         // Móvil: drawer deslizante · Desktop: siempre visible
         'transition-transform duration-200 md:translate-x-0',
-        open ? 'translate-x-0' : 'translate-x-full'
+        open ? 'translate-x-0' : '-translate-x-full'
       )}
     >
       <div className="px-5 pt-6 pb-4 flex items-start justify-between">
