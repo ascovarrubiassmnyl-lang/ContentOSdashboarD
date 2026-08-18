@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Gauge, Plug, Sparkles } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Gauge, Plug } from 'lucide-react';
 import { useState } from 'react';
 import { Button, Card, Spinner, Tabs } from '@/components/ui';
 import {
@@ -81,14 +81,14 @@ export default function ControlPage() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Link href="/generador">
+          <Link href="/calendario">
             <Button>
-              <Sparkles size={14} className="inline mr-1.5 -mt-0.5" />
-              Crear pieza
+              <CalendarDays size={14} className="inline mr-1.5 -mt-0.5" />
+              Agendar pieza
             </Button>
           </Link>
           <Link href="/calendario">
-            <Button variant="secondary">Ver pipeline</Button>
+            <Button variant="secondary">Ver calendario</Button>
           </Link>
           <Link href="/conexion">
             <Button variant="secondary">
@@ -120,20 +120,23 @@ export default function ControlPage() {
         </div>
       )}
 
-      {/* ── Mini-cards operativas ── */}
+      {/* ── Mini-cards operativas ──
+          "Quality gate" y "Bloqueos creativos" medían los guiones del
+          generador; sin esa sección se quedarían clavadas en cero, así que
+          se sustituyen por lo que sí tiene origen real: el calendario. */}
       <div className="grid grid-cols-12 gap-4 mb-6">
-        <Card className="col-span-12 md:col-span-4 !p-4 flex items-center gap-3">
+        <Card className="col-span-12 md:col-span-6 !p-4 flex items-center gap-3">
           <span className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
             <Gauge size={17} />
           </span>
           <div>
             <p className="text-lg font-extrabold leading-none">
-              {data?.operation.avgScore ?? '—'}%
+              {data?.operation.active ?? '—'} piezas
             </p>
-            <p className="text-[11px] text-muted">Quality gate promedio</p>
+            <p className="text-[11px] text-muted">Activas en el calendario</p>
           </div>
         </Card>
-        <Card className="col-span-12 md:col-span-4 !p-4 flex items-center gap-3">
+        <Card className="col-span-12 md:col-span-6 !p-4 flex items-center gap-3">
           <span className="h-9 w-9 rounded-xl bg-positive/10 text-positive flex items-center justify-center">
             <CheckCircle2 size={17} />
           </span>
@@ -142,17 +145,6 @@ export default function ControlPage() {
               {data?.operation.ready ?? '—'} piezas
             </p>
             <p className="text-[11px] text-muted">Listas para salir</p>
-          </div>
-        </Card>
-        <Card className="col-span-12 md:col-span-4 !p-4 flex items-center gap-3">
-          <span className="h-9 w-9 rounded-xl bg-negative/10 text-negative flex items-center justify-center">
-            <AlertTriangle size={17} />
-          </span>
-          <div>
-            <p className="text-lg font-extrabold leading-none">
-              {data?.operation.blocked ?? '—'} rojos
-            </p>
-            <p className="text-[11px] text-muted">Bloqueos creativos</p>
           </div>
         </Card>
       </div>

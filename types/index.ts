@@ -66,29 +66,6 @@ export interface StoryMetric {
   published_at: string;
 }
 
-export type SourceType =
-  | 'transcripcion'
-  | 'dm'
-  | 'llamada'
-  | 'comentario'
-  | 'objecion'
-  | 'documento';
-
-export interface Source {
-  id: string;
-  account_id: string;
-  type: SourceType;
-  title: string;
-  content: string;
-  file_url: string | null;
-  file_name?: string | null;
-  file_mime?: string | null;
-  file_size?: number | null;
-  extract_note?: string | null; // aviso si la extracción fue parcial
-  tags: string[];
-  created_at: string;
-}
-
 export type ScriptFormat = 'reel' | 'carrusel' | 'historia';
 export type ScriptStatus = 'borrador' | 'aprobado' | 'publicado';
 

@@ -403,12 +403,11 @@ export function PostsPreview({ posts }: { posts: MediaPost[] }) {
 
 // ── 🚦 Operación de contenido ────────────────────────────────
 export function OperationCard({ op }: { op: MetricsResponse['operation'] }) {
+  // Score medio, Bloqueos y Publicables salían de los guiones del generador.
+  // Sin esa sección nunca tendrían un valor real: quedan fuera.
   const items = [
     { label: 'Piezas activas', value: op.active, color: 'text-primary' },
     { label: 'Listas para salir', value: op.ready, color: 'text-positive' },
-    { label: 'Score medio', value: `${op.avgScore}`, color: 'text-orange' },
-    { label: 'Bloqueos', value: op.blocked, color: 'text-negative' },
-    { label: 'Publicables', value: op.publishable, color: 'text-pink' },
   ];
   return (
     <Card className="col-span-12 xl:col-span-4">
@@ -426,10 +425,10 @@ export function OperationCard({ op }: { op: MetricsResponse['operation'] }) {
         ))}
       </div>
       <Link
-        href="/generador"
+        href="/calendario"
         className="block text-center text-xs font-bold text-primary mt-4 hover:underline"
       >
-        Ir al generador →
+        Ir al calendario →
       </Link>
     </Card>
   );

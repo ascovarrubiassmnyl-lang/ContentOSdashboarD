@@ -12,7 +12,6 @@ import {
   FileText,
   Film,
   Layers,
-  Sparkles,
   TrendingUp,
   Trophy,
   Users,
@@ -24,7 +23,6 @@ import {
   ConnectionResponse,
   MetricsResponse,
   Report,
-  Script,
 } from '@/types';
 import { cn, fmtInt, fmtPct, fmtSeconds, relativeTime } from '@/lib/utils';
 
@@ -60,10 +58,6 @@ export default function ResumenPage() {
   const { data: rep } = useQuery<{ reports: Report[] }>({
     queryKey: ['reports'],
     queryFn: async () => (await fetch('/api/reports')).json(),
-  });
-  const { data: scriptsData } = useQuery<{ scripts: Script[] }>({
-    queryKey: ['scripts'],
-    queryFn: async () => (await fetch('/api/scripts')).json(),
   });
   const { data: conn } = useQuery<ConnectionResponse>({
     queryKey: ['connection'],
@@ -121,7 +115,6 @@ export default function ResumenPage() {
     .slice(0, 5);
 
   const lastReport = rep?.reports?.[0] ?? null;
-  const drafts = (scriptsData?.scripts ?? []).slice(0, 3);
 
   const heroCards = [
     { icon: Users, label: 'Seguidores', value: fmtInt(followers?.value ?? 0), delta: followers?.delta ?? null, desc: 'Total actual' },
@@ -145,10 +138,10 @@ export default function ResumenPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/generador">
+          <Link href="/calendario">
             <Button>
-              <Sparkles size={14} className="inline mr-1.5 -mt-0.5" />
-              Crear pieza
+              <CalendarDays size={14} className="inline mr-1.5 -mt-0.5" />
+              Agendar pieza
             </Button>
           </Link>
           <Link href="/reportes">
@@ -355,57 +348,6 @@ export default function ResumenPage() {
           )}
         </Card>
 
-        {/* ── Guiones recientes ── */}
-        <Card className="col-span-12 xl:col-span-5" glow={false}>
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="accent-label mb-1">Creación</p>
-              <h3 className="font-extrabold">📝 Guiones recientes</h3>
-            </div>
-            <Link href="/generador" className="text-xs font-bold text-primary hover:underline">
-              Generador →
-            </Link>
-          </div>
-          {drafts.length === 0 ? (
-            <div className="text-center py-6">
-              <Sparkles size={28} className="text-muted/40 mx-auto mb-3" />
-              <p className="text-sm text-muted">Sin guiones guardados todavía.</p>
-              <Link href="/generador">
-                <Button variant="secondary" className="mt-3">
-                  Generar el primero
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {drafts.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center gap-3 bg-bg border border-line rounded-xl px-3.5 py-3"
-                >
-                  <span
-                    className={cn(
-                      'text-sm font-extrabold shrink-0 w-8 text-center',
-                      s.score >= 80
-                        ? 'text-positive'
-                        : s.score >= 60
-                        ? 'text-orange'
-                        : 'text-negative'
-                    )}
-                  >
-                    {s.score}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold truncate">{s.title}</p>
-                    <p className="text-[11px] text-muted capitalize">
-                      {s.format} · {s.status} · {relativeTime(s.created_at)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
       </div>
     </div>
   );

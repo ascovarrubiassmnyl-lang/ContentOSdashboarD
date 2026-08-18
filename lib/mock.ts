@@ -204,42 +204,6 @@ export async function seedIfNeeded(ws: Workspace): Promise<void> {
   });
   await writeFor(ws, 'stories', stories);
 
-  // ── Fuentes de ejemplo ───────────────────────────────────
-  await writeFor(ws, 'sources', [
-    {
-      id: 'src_1',
-      account_id: accountId,
-      type: 'comentario',
-      title: 'Comentarios recurrentes sobre horarios',
-      content:
-        '"¿A qué hora publicas?", "yo publico y nadie lo ve", "siento que el algoritmo me odia". Se repite la frustración con el alcance orgánico y la confusión sobre los horarios de publicación.',
-      file_url: null,
-      tags: ['algoritmo', 'horarios', 'alcance'],
-      created_at: new Date(Date.now() - 5 * 86400_000).toISOString(),
-    },
-    {
-      id: 'src_2',
-      account_id: accountId,
-      type: 'dm',
-      title: 'DM — bloqueo creativo de una seguidora',
-      content:
-        '"Llevo 3 semanas sin publicar porque no sé qué decir. Veo mis métricas y me deprimo. ¿Cómo haces para tener ideas todos los días?" — patrón: parálisis por análisis + falta de sistema de ideas.',
-      file_url: null,
-      tags: ['bloqueo-creativo', 'sistema', 'ideas'],
-      created_at: new Date(Date.now() - 3 * 86400_000).toISOString(),
-    },
-    {
-      id: 'src_3',
-      account_id: accountId,
-      type: 'objecion',
-      title: 'Objeción: "la IA hace contenido genérico"',
-      content:
-        'En llamada de descubrimiento: "yo probé ChatGPT para guiones y todo suena igual, robótico". La objeción real es que usan IA sin contexto de SUS datos ni SU voz.',
-      file_url: null,
-      tags: ['ia', 'objecion', 'personalizacion'],
-      created_at: new Date(Date.now() - 86400_000).toISOString(),
-    },
-  ]);
 
   // Colecciones vacías que se llenan con el uso
   await writeFor(ws, 'scripts', []);

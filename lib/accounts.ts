@@ -17,8 +17,7 @@ import {
   writeSingleton,
 } from './db';
 import { decryptSecret, encryptSecret, hasEncryptionKey } from './crypto';
-import { deleteUpload } from './files';
-import { IgAccount, Source } from '@/types';
+import { IgAccount } from '@/types';
 
 export interface Workspace {
   id: string; // 'acc_<idZernio>'
@@ -162,19 +161,7 @@ export async function deleteAccount(id: string): Promise<void> {
   const ws = rows.find((w) => w.id === id);
   if (!ws) throw new Error('Cuenta no encontrada.');
 
-  // Primero los archivos del banco de fuentes: viven fuera del almacén de
-  // colecciones, así que si no se borran aquí quedan huérfanos para siempre
-  // (documentos de un cliente que ya se dio de baja).
-  try {
-    const sources = await readCollection<Source>(collectionKey(ws, 'sources'));
-    for (const s of sources) {
-      if (s.file_url) await deleteUpload(s.id);
-    }
-  } catch {
-    // Un fallo de almacenamiento no debe impedir dar de baja la cuenta.
-  }
-
-  // Ahora sí, todos los datos de esa cuenta.
+  // Todos los datos de esa cuenta.
   for (const name of SCOPED_COLLECTIONS) {
     await deleteKey(collectionKey(ws, name));
   }

@@ -4,10 +4,37 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, FileText, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Button, Card, EmptyState, Input, Spinner, Tabs } from '@/components/ui';
-import { Report } from '@/types';
+import { ConnectionResponse, Report } from '@/types';
 
 function iso(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Markdown → HTML para el PDF. Igual que MarkdownView pero con estilos de
+// impresión (fondo blanco, texto oscuro) en vez de clases de Tailwind.
+function mdToPrintHtml(md: string): string {
+  return escapeHtml(md)
+    .replace(/^## (.*)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.*)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^(\d+)\. (.*)$/gm, '<p class="num"><b>$1.</b><span>$2</span></p>')
+    .replace(/^- (.*)$/gm, '<li>$1</li>')
+    .replace(/^---$/gm, '<hr/>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .split('\n\n')
+    .map((block) => {
+      const b = block.trim();
+      if (!b) return '';
+      // Las viñetas sueltas van envueltas en <ul> o el PDF pierde la sangría.
+      if (b.startsWith('<li>')) return `<ul>${b}</ul>`;
+      return b.startsWith('<') ? b : `<p>${b}</p>`;
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
 function presetRange(preset: string): { start: string; end: string } {
@@ -58,6 +85,13 @@ export default function ReportesPage() {
     queryFn: async () => (await fetch('/api/reports')).json(),
   });
 
+  // El PDF lleva el nombre de la cuenta: con varias cuentas, un reporte sin
+  // identificar no dice de quién son los números.
+  const { data: conn } = useQuery<ConnectionResponse>({
+    queryKey: ['connection'],
+    queryFn: async () => (await fetch('/api/connection')).json(),
+  });
+
   const generate = useMutation({
     mutationFn: async () => {
       const range =
@@ -78,17 +112,62 @@ export default function ReportesPage() {
     },
   });
 
-  const exportMd = (r: Report) => {
-    const blob = new Blob(
-      [`# Reporte ${r.period_start} → ${r.period_end}\n\n${r.summary_md}`],
-      { type: 'text/markdown' }
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reporte-${r.period_start}-${r.period_end}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // Exporta a PDF con el diálogo de impresión del navegador: sin librerías
+  // extra, el texto queda seleccionable y el usuario elige "Guardar como PDF".
+  // Se imprime desde un iframe oculto para no perder la página actual ni
+  // chocar con el bloqueador de ventanas emergentes.
+  const exportPdf = (r: Report) => {
+    const cuenta = conn?.workspace?.label ?? '';
+    const generado = new Date(r.created_at).toLocaleDateString('es', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    const doc = `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<title>Reporte ${r.period_start} a ${r.period_end}${cuenta ? ` — ${cuenta}` : ''}</title>
+<style>
+  @page { margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         color: #16161d; line-height: 1.55; font-size: 11.5pt; margin: 0; }
+  header { border-bottom: 2px solid #7C7CF5; padding-bottom: 10px; margin-bottom: 22px; }
+  .eyebrow { font-size: 8.5pt; letter-spacing: .14em; text-transform: uppercase;
+             color: #7C7CF5; font-weight: 700; margin: 0 0 4px; }
+  h1 { font-size: 17pt; margin: 0 0 4px; }
+  .meta { font-size: 9.5pt; color: #66667a; margin: 0; }
+  h2 { font-size: 12.5pt; color: #4a4ae0; margin: 20px 0 8px; page-break-after: avoid; }
+  p { margin: 0 0 9px; }
+  li { margin: 0 0 5px; }
+  ul { margin: 0 0 10px; padding-left: 20px; }
+  strong { color: #000; }
+  em { color: #66667a; font-style: italic; }
+  hr { border: 0; border-top: 1px solid #dcdce4; margin: 18px 0; }
+  .num { display: flex; gap: 8px; margin: 0 0 6px; }
+  .num b { color: #4a4ae0; }
+  footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid #dcdce4;
+           font-size: 8.5pt; color: #8a8a9c; }
+</style></head><body>
+<header>
+  <p class="eyebrow">Content OS · Reporte de resultados</p>
+  <h1>${r.period_start} → ${r.period_end}</h1>
+  <p class="meta">${cuenta ? `${escapeHtml(cuenta)} · ` : ''}Generado el ${generado}</p>
+</header>
+${mdToPrintHtml(r.summary_md)}
+<footer>Content OS · Datos de Instagram vía Zernio</footer>
+</body></html>`;
+
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    frame.srcdoc = doc;
+    frame.onload = () => {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      // Se quita cuando el diálogo ya tomó el contenido.
+      setTimeout(() => frame.remove(), 60_000);
+    };
+    document.body.appendChild(frame);
   };
 
   const reports = data?.reports ?? [];
@@ -193,9 +272,9 @@ export default function ReportesPage() {
                     {selected.period_start} → {selected.period_end}
                   </h2>
                 </div>
-                <Button variant="secondary" onClick={() => exportMd(selected)}>
+                <Button variant="secondary" onClick={() => exportPdf(selected)}>
                   <Download size={14} className="inline mr-1.5 -mt-0.5" />
-                  Exportar MD
+                  Exportar PDF
                 </Button>
               </div>
               <MarkdownView md={selected.summary_md} />

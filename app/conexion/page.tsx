@@ -66,7 +66,7 @@ const FLOW_STEPS = [
   {
     n: 5,
     title: 'Datos separados',
-    desc: 'Cada cuenta tiene sus propias métricas, fuentes, ideas, calendario, guiones y reportes. Cambiar de cuenta cambia todo el dashboard.',
+    desc: 'Cada cuenta tiene sus propias métricas, ideas, calendario y reportes. Cambiar de cuenta cambia todo el dashboard.',
   },
 ];
 
@@ -182,7 +182,7 @@ export default function ConexionPage() {
                 'Todavía no ha entrado ninguna sincronización para esta cuenta.'}
             </p>
             <p className="text-xs text-muted mt-2">
-              El resto del dashboard (fuentes, ideas, calendario y generador) sí funciona
+              El resto del dashboard (ideas y calendario) sí funciona
               para esta cuenta: solo faltan los números de Instagram.
             </p>
           </div>
@@ -288,7 +288,7 @@ export default function ConexionPage() {
                         onClick={() => {
                           if (
                             confirm(
-                              `¿Eliminar ${a.label}? Se borran TODOS sus datos: métricas, fuentes, ideas, calendario, guiones y reportes. No se puede deshacer.`
+                              `¿Eliminar ${a.label}? Se borran TODOS sus datos: métricas, ideas, calendario y reportes. No se puede deshacer.`
                             )
                           ) {
                             remove.mutate(a.id);

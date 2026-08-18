@@ -1,6 +1,6 @@
-// Cliente de la API de Anthropic para el generador de guiones y reportes.
-// Si ANTHROPIC_API_KEY no está configurada, cae a un generador demo que
-// usa los datos reales del dashboard (hooks top, retención, fuentes) para
+// Cliente de la API de Anthropic para la redacción de reportes.
+// Si ANTHROPIC_API_KEY no está configurada, se cae a un redactor local que
+// usa los datos reales del dashboard (hooks top, retención) para
 // que el flujo completo sea navegable sin llaves.
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
@@ -23,7 +23,7 @@ export interface ChatTurn {
   content: string;
 }
 
-// Conversación multi-turno (para el chat del generador).
+// Conversación multi-turno.
 export async function askClaudeMessages(
   system: string,
   messages: ChatTurn[],

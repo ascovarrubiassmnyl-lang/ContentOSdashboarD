@@ -35,7 +35,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <Sidebar open={open} onClose={() => setOpen(false)} />
 
-      <main className="md:ml-60 min-h-screen px-4 md:px-8 pt-[4.75rem] md:pt-7 pb-7 max-w-[1600px]">
+      <main className="md:mr-60 min-h-screen px-4 md:px-8 pt-[4.75rem] md:pt-7 pb-7 max-w-[1600px]">
         {children}
       </main>
     </>

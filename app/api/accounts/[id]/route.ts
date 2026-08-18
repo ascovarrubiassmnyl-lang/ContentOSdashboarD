@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   return NextResponse.json({ account: updated });
 }
 
-// Elimina la cuenta Y todos sus datos (métricas, fuentes, ideas, calendario,
+// Elimina la cuenta Y todos sus datos (métricas, ideas, calendario,
 // guiones y reportes). No se puede borrar la última cuenta que queda.
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
