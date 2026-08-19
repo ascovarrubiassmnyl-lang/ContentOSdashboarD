@@ -12,17 +12,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <>
       {/* ── Barra superior (solo móvil) ── */}
-      <header className="md:hidden fixed top-0 inset-x-0 z-40 h-14 bg-[#0C0C15]/95 backdrop-blur border-b border-line flex items-center justify-between px-4">
-        <p className="font-extrabold tracking-tight">
-          Content <span className="text-primary">OS</span>
-        </p>
+      {/* El botón va a la IZQUIERDA, del mismo lado por el que entra el
+          drawer: así el menú se abre desde donde se pulsa. */}
+      <header className="md:hidden fixed top-0 inset-x-0 z-40 h-14 bg-[#0C0C15]/95 backdrop-blur border-b border-line flex items-center gap-3 px-4">
         <button
           onClick={() => setOpen(true)}
-          className="h-9 w-9 rounded-lg border border-line flex items-center justify-center text-soft active:bg-line/50"
+          className="h-9 w-9 rounded-lg border border-line flex items-center justify-center text-soft active:bg-line/50 shrink-0"
           aria-label="Abrir menú"
         >
           <Menu size={18} />
         </button>
+        <p className="font-extrabold tracking-tight">
+          Content <span className="text-primary">OS</span>
+        </p>
       </header>
 
       {/* ── Fondo oscuro al abrir el drawer (solo móvil) ── */}
