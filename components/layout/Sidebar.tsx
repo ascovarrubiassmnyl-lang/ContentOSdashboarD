@@ -6,6 +6,7 @@ import {
   BarChart3,
   CalendarDays,
   FileText,
+  Film,
   Home,
   Lightbulb,
   Plug,
@@ -17,6 +18,7 @@ import AccountSwitcher from './AccountSwitcher';
 const clientViews: { href: string | null; label: string; icon: typeof Home }[] = [
   { href: '/resumen', label: 'Resumen', icon: Home },
   { href: '/control', label: 'Control', icon: BarChart3 },
+  { href: '/videos', label: 'Videos', icon: Film },
   { href: '/reportes', label: 'Reportes', icon: FileText },
 ];
 
