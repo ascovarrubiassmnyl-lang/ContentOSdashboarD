@@ -175,6 +175,7 @@ export async function seedIfNeeded(ws: Workspace): Promise<void> {
       shares,
       views,
       reach,
+      follows: Math.round(reach * (0.001 + rand() * 0.004)),
       avg_watch_time_seconds: isReel ? +(4.5 + rand() * 11).toFixed(1) : null,
       retention_curve: isReel
         ? { '0-3s': r3, '3-8s': r8, '8-15s': r15, '15-30s': r30, '30s+': r30plus }

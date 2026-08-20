@@ -52,6 +52,9 @@ export interface MediaPost {
   shares: number;
   views: number;
   reach: number;
+  // Seguidores ganados gracias a esta pieza. `null` = la fuente no lo entrega
+  // (distinto de 0, que significaría que no trajo ninguno).
+  follows: number | null;
   avg_watch_time_seconds: number | null;
   retention_curve: Record<string, number> | null;
 }

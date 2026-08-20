@@ -194,6 +194,7 @@ function mapPost(p: ZernioPost, accountId: string): MediaPost {
     shares: a.shares ?? 0,
     views: a.views ?? a.impressions ?? 0,
     reach: a.reach ?? 0,
+    follows: a.follows ?? null,
     avg_watch_time_seconds:
       a.igReelsAvgWatchTime != null && a.igReelsAvgWatchTime > 0
         ? +(a.igReelsAvgWatchTime / 1000).toFixed(1)

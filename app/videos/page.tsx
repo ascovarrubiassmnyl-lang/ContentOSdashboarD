@@ -17,6 +17,7 @@ import {
   Send,
   Timer,
   TrendingUp,
+  UserPlus,
   Users,
   Zap,
 } from 'lucide-react';
@@ -31,7 +32,7 @@ const TYPE_META: Record<string, { label: string; icon: typeof Film }> = {
   STORY: { label: 'Historia', icon: Timer },
 };
 
-type Orden = 'recientes' | 'vistas' | 'interaccion';
+type Orden = 'recientes' | 'vistas' | 'interaccion' | 'seguidores';
 
 function interacciones(p: MediaPost): number {
   return p.likes + p.comments + p.saves + p.shares;
@@ -80,19 +81,40 @@ function Metrica({
   label,
   value,
   hint,
+  destacada,
+  apagada,
 }: {
   icon: typeof Eye;
   label: string;
   value: string;
   hint?: string;
+  destacada?: boolean;
+  apagada?: boolean;
 }) {
   return (
-    <div className="bg-bg border border-line rounded-xl px-3.5 py-3">
-      <div className="flex items-center gap-1.5 text-muted mb-1.5">
+    <div
+      className={cn(
+        'rounded-xl px-3.5 py-3 border',
+        destacada ? 'bg-primary/10 border-primary/30' : 'bg-bg border-line'
+      )}
+    >
+      <div
+        className={cn(
+          'flex items-center gap-1.5 mb-1.5',
+          destacada ? 'text-primary' : 'text-muted'
+        )}
+      >
         <Icon size={13} />
         <span className="text-[11px] font-semibold uppercase tracking-wider">{label}</span>
       </div>
-      <p className="text-xl font-extrabold leading-none">{value}</p>
+      <p
+        className={cn(
+          'font-extrabold leading-none',
+          apagada ? 'text-sm text-muted' : 'text-xl'
+        )}
+      >
+        {value}
+      </p>
       {hint && <p className="text-[11px] text-muted mt-1">{hint}</p>}
     </div>
   );
@@ -124,16 +146,22 @@ export default function VideosPage() {
     const filtrados = tipo === 'todos' ? posts : posts.filter((p) => p.media_type === tipo);
     const copia = [...filtrados];
     if (orden === 'vistas') copia.sort((a, b) => b.views - a.views);
+    else if (orden === 'seguidores') copia.sort((a, b) => (b.follows ?? 0) - (a.follows ?? 0));
     else if (orden === 'interaccion') copia.sort((a, b) => interacciones(b) - interacciones(a));
     else copia.sort((a, b) => b.published_at.localeCompare(a.published_at));
     return copia;
   }, [posts, tipo, orden]);
+
+  // Distinguir "no trajo seguidores" de "la fuente no da el dato": si ninguna
+  // pieza tiene valor, es lo segundo.
+  const datosDeFollows = useMemo(() => posts.some((p) => (p.follows ?? 0) > 0), [posts]);
 
   const totales = useMemo(
     () => ({
       vistas: visibles.reduce((s, p) => s + p.views, 0),
       alcance: visibles.reduce((s, p) => s + p.reach, 0),
       interacciones: visibles.reduce((s, p) => s + interacciones(p), 0),
+      seguidores: visibles.reduce((s, p) => s + (p.follows ?? 0), 0),
     }),
     [visibles]
   );
@@ -162,7 +190,7 @@ export default function VideosPage() {
         <>
           {/* ── Resumen de lo que se está viendo ── */}
           <div className="grid grid-cols-12 gap-4 mb-5">
-            <Card className="col-span-12 md:col-span-4 !p-4">
+            <Card className={cn('!p-4', datosDeFollows ? 'col-span-12 md:col-span-4' : 'col-span-12 md:col-span-4')}>
               <p className="text-2xl font-extrabold leading-none">{visibles.length}</p>
               <p className="text-[11px] text-muted mt-1">
                 {visibles.length === 1 ? 'pieza' : 'piezas'}
@@ -173,12 +201,20 @@ export default function VideosPage() {
               <p className="text-2xl font-extrabold leading-none">{fmtInt(totales.vistas)}</p>
               <p className="text-[11px] text-muted mt-1">vistas acumuladas</p>
             </Card>
-            <Card className="col-span-6 md:col-span-4 !p-4">
+            <Card className={cn('!p-4', datosDeFollows ? 'col-span-6 md:col-span-2' : 'col-span-6 md:col-span-4')}>
               <p className="text-2xl font-extrabold leading-none">
                 {fmtInt(totales.interacciones)}
               </p>
               <p className="text-[11px] text-muted mt-1">interacciones</p>
             </Card>
+            {datosDeFollows && (
+              <Card className="col-span-12 md:col-span-2 !p-4 border-primary/30">
+                <p className="text-2xl font-extrabold leading-none text-primary">
+                  +{fmtInt(totales.seguidores)}
+                </p>
+                <p className="text-[11px] text-muted mt-1">seguidores ganados</p>
+              </Card>
+            )}
           </div>
 
           {/* ── Filtros ── */}
@@ -203,6 +239,9 @@ export default function VideosPage() {
                 { value: 'recientes', label: 'Más recientes' },
                 { value: 'vistas', label: 'Más vistas' },
                 { value: 'interaccion', label: 'Más interacción' },
+                ...(datosDeFollows
+                  ? [{ value: 'seguidores', label: 'Más seguidores' }]
+                  : []),
               ]}
               active={orden}
               onChange={(v) => setOrden(v as Orden)}
@@ -250,6 +289,11 @@ export default function VideosPage() {
                       <span className="flex items-center gap-1">
                         <Zap size={11} /> {fmtPct(engagement(p))}
                       </span>
+                      {datosDeFollows && (
+                        <span className="flex items-center gap-1 text-primary font-bold ml-auto">
+                          <UserPlus size={11} /> +{fmtInt(p.follows ?? 0)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>
@@ -259,13 +303,25 @@ export default function VideosPage() {
         </>
       )}
 
-      <DetallePost post={abierto} onClose={() => setAbierto(null)} />
+      <DetallePost
+        post={abierto}
+        onClose={() => setAbierto(null)}
+        datosDeFollows={datosDeFollows}
+      />
     </div>
   );
 }
 
 // ── Detalle de una pieza ────────────────────────────────────
-function DetallePost({ post, onClose }: { post: MediaPost | null; onClose: () => void }) {
+function DetallePost({
+  post,
+  onClose,
+  datosDeFollows,
+}: {
+  post: MediaPost | null;
+  onClose: () => void;
+  datosDeFollows: boolean;
+}) {
   if (!post) return null;
   const Icon = TYPE_META[post.media_type]?.icon ?? Film;
   const inter = interacciones(post);
@@ -306,6 +362,21 @@ function DetallePost({ post, onClose }: { post: MediaPost | null; onClose: () =>
               label="Alcance"
               value={fmtInt(post.reach)}
               hint="cuentas distintas"
+            />
+            {/* Seguidores que trajo la pieza. Si la fuente no entrega el dato
+                se dice, en vez de mostrar un 0 que se leería como "no trajo
+                ninguno". */}
+            <Metrica
+              icon={UserPlus}
+              label="Seguidores"
+              destacada={datosDeFollows}
+              apagada={!datosDeFollows}
+              value={datosDeFollows ? `+${fmtInt(post.follows ?? 0)}` : 'No disponible'}
+              hint={
+                datosDeFollows
+                  ? 'ganados con esta pieza'
+                  : 'Instagram no lo entrega para esta cuenta'
+              }
             />
             <Metrica
               icon={Zap}
