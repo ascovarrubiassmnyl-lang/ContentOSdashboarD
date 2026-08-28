@@ -560,12 +560,25 @@ function AddAccountModal({
   const [label, setLabel] = useState('');
   const [options, setOptions] = useState<ZernioOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Añadidas en esta misma pasada. Una key de Zernio suele traer varias cuentas
+  // (Instagram y Páginas de Facebook); cerrar el modal tras la primera obligaba
+  // a volver a pegar la key para cada una.
+  const [added, setAdded] = useState<string[]>([]);
 
   const reset = () => {
     setApiKey('');
     setLabel('');
     setOptions(null);
     setError(null);
+    setAdded([]);
+  };
+
+  // Cerrar. Si se añadió algo, el panel entero tiene que recargarse.
+  const finish = () => {
+    const changed = added.length > 0;
+    reset();
+    if (changed) onAdded();
+    else onClose();
   };
 
   const probe = useMutation({
@@ -605,22 +618,19 @@ function AddAccountModal({
       if (!res.ok) throw new Error(json.error ?? 'No se pudo añadir la cuenta');
       return json as { syncError: string | null };
     },
-    onSuccess: () => {
-      reset();
-      onAdded();
+    // El modal se queda abierto: así se añaden de una vez todas las cuentas de
+    // esa key sin volver a pegarla. El nombre personalizado sí se limpia,
+    // porque era para la cuenta que se acaba de añadir.
+    onSuccess: (_json, opt) => {
+      setError(null);
+      setLabel('');
+      setAdded((prev) => [...prev, opt.id]);
     },
     onError: (err) => setError((err as Error).message),
   });
 
   return (
-    <Modal
-      open={open}
-      onClose={() => {
-        reset();
-        onClose();
-      }}
-      title="Añadir cuenta"
-    >
+    <Modal open={open} onClose={finish} title="Añadir cuenta">
       {!options ? (
         <>
           <p className="text-xs text-muted mb-4 leading-relaxed">
@@ -637,13 +647,7 @@ function AddAccountModal({
           />
           {error && <p className="text-xs text-negative mb-3">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                reset();
-                onClose();
-              }}
-            >
+            <Button variant="secondary" onClick={finish}>
               Cancelar
             </Button>
             <Button
@@ -656,14 +660,18 @@ function AddAccountModal({
         </>
       ) : (
         <>
-          <p className="text-xs text-muted mb-4">
-            Cuentas conectadas a esa key. Elige cuál quieres añadir:
+          <p className="text-xs text-muted mb-4 leading-relaxed">
+            Cuentas conectadas a esa key — Instagram y Páginas de Facebook.{' '}
+            <strong className="text-soft">Puedes añadir varias</strong>: cada una queda como
+            una cuenta aparte, con sus propias métricas.
           </p>
           <div className="space-y-2 mb-4">
-            {options.map((o) => (
+            {options.map((o) => {
+              const done = o.alreadyAdded || added.includes(o.id);
+              return (
               <button
                 key={o.id}
-                disabled={o.alreadyAdded || create.isPending}
+                disabled={done || create.isPending}
                 onClick={() => create.mutate(o)}
                 className="w-full flex items-center gap-3 rounded-xl border border-line bg-bg px-3.5 py-3 text-left transition-all hover:border-primary/50 disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -676,15 +684,20 @@ function AddAccountModal({
                   <p className="text-[11px] text-muted truncate">
                     <Users size={11} className="inline mr-1 -mt-0.5" />
                     {fmtInt(o.followers)} seguidores
-                    {o.alreadyAdded && ' · ya añadida'}
+                    {added.includes(o.id) ? (
+                      <span className="text-positive"> · ✓ añadida</span>
+                    ) : (
+                      o.alreadyAdded && ' · ya añadida'
+                    )}
                   </p>
                 </div>
                 {create.isPending && create.variables?.id === o.id && <Spinner />}
               </button>
-            ))}
+              );
+            })}
           </div>
           <Input
-            label="Nombre en el menú (opcional)"
+            label="Nombre en el menú (opcional — se aplica a la siguiente que elijas)"
             value={label}
             onChange={setLabel}
             placeholder="Marca personal, Cliente X…"
@@ -695,9 +708,12 @@ function AddAccountModal({
               Añadiendo y trayendo sus métricas… puede tardar unos segundos.
             </p>
           )}
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOptions(null)}>
               Volver
+            </Button>
+            <Button onClick={finish} disabled={create.isPending}>
+              {added.length > 0 ? `Listo (${added.length})` : 'Cerrar'}
             </Button>
           </div>
         </>
