@@ -17,7 +17,7 @@ import {
   writeSingleton,
 } from './db';
 import { decryptSecret, encryptSecret, hasEncryptionKey } from './crypto';
-import { isAuthEnabled } from './supabase';
+import { isAuthEnabled } from './auth';
 import { IgAccount } from '@/types';
 
 export interface Workspace {
@@ -138,29 +138,6 @@ export async function getAccountForUser(
 ): Promise<Workspace | null> {
   const ws = await getAccount(id);
   return ws && owns(ws, userId) ? ws : null;
-}
-
-// La primera vez que entra el correo de LEGACY_OWNER_EMAIL, le asigna todos
-// los Workspaces que todavía no tienen dueño (los que existían antes de este
-// cambio). Es idempotente: una vez reclamados, no vuelve a hacer nada.
-export async function claimLegacyWorkspaces(
-  userId: string,
-  email: string
-): Promise<number> {
-  const legacyOwnerEmail = process.env.LEGACY_OWNER_EMAIL;
-  if (!legacyOwnerEmail || legacyOwnerEmail.toLowerCase() !== email.toLowerCase()) {
-    return 0;
-  }
-  const rows = await listAccounts();
-  let claimed = 0;
-  for (const w of rows) {
-    if (!w.owner_user_id) {
-      w.owner_user_id = userId;
-      claimed++;
-    }
-  }
-  if (claimed > 0) await saveAccounts(rows);
-  return claimed;
 }
 
 export async function saveAccounts(rows: Workspace[]): Promise<void> {

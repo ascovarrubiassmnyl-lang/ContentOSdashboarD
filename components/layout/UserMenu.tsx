@@ -4,7 +4,7 @@
 // necesita ser cliente (onClick) mientras Sidebar sigue leyendo el usuario
 // desde el servidor.
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth';
 
@@ -15,18 +15,12 @@ function initials(name: string): string {
 }
 
 export default function UserMenu({ user }: { user: SessionUser }) {
-  const router = useRouter();
   const [pending, setPending] = useState(false);
 
-  const signOut = async () => {
+  const leave = async () => {
     if (pending) return;
     setPending(true);
-    try {
-      await fetch('/api/auth/signout', { method: 'POST' });
-    } finally {
-      router.push('/login');
-      router.refresh();
-    }
+    await signOut({ callbackUrl: '/login' });
   };
 
   return (
@@ -48,7 +42,7 @@ export default function UserMenu({ user }: { user: SessionUser }) {
         <span className="block text-[11px] text-muted truncate">{user.email}</span>
       </span>
       <button
-        onClick={signOut}
+        onClick={leave}
         disabled={pending}
         title="Cerrar sesión"
         aria-label="Cerrar sesión"

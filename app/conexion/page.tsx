@@ -86,6 +86,16 @@ export default function ConexionPage() {
   // Usuario nuevo sin ninguna cuenta todavía: /api/connection depende de una
   // cuenta activa (409 si no hay ninguna) — no tiene sentido pedirla.
   const hasAccounts = accountsQuery.isSuccess && accounts.length > 0;
+  const isNewUser = accountsQuery.isSuccess && accounts.length === 0;
+
+  // Onboarding: al usuario recién llegado se le pide la credencial de una vez,
+  // sin hacerle buscar el botón. Solo la primera vez — si la cierra, se queda
+  // el bloque de bienvenida y decide él.
+  const [autoOpened, setAutoOpened] = useState(false);
+  if (isNewUser && !autoOpened) {
+    setAutoOpened(true);
+    setAddOpen(true);
+  }
 
   const { data, isLoading } = useQuery<ConnectionResponse>({
     queryKey: ['connection'],
@@ -179,10 +189,33 @@ export default function ConexionPage() {
             <Plug size={26} />
           </span>
           <h2 className="text-lg font-extrabold mb-1.5">Conectá tu primera cuenta de Instagram</h2>
-          <p className="text-sm text-muted leading-relaxed mb-6">
-            Todavía no tenés ninguna cuenta conectada a este espacio de trabajo. Conectala vía
-            Zernio para empezar a ver métricas reales, ideas y calendario.
+          <p className="text-sm text-muted leading-relaxed mb-5">
+            Para traer tus métricas reales hace falta una sola credencial: tu{' '}
+            <strong className="text-soft">API key de Zernio</strong>. Zernio es el puente con
+            Instagram — evita tener que crear una app de Meta o conectar una Página de Facebook.
           </p>
+          <div className="text-left text-xs text-muted bg-bg border border-line rounded-xl px-4 py-3.5 mb-6 space-y-1.5">
+            <p>
+              <strong className="text-soft">1.</strong> Tu cuenta de Instagram tiene que ser
+              Creator o Business (requisito de Instagram para dar métricas).
+            </p>
+            <p>
+              <strong className="text-soft">2.</strong> Conectala en{' '}
+              <a
+                href="https://zernio.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary hover:underline"
+              >
+                zernio.com
+              </a>{' '}
+              y creá una API key en su panel.
+            </p>
+            <p>
+              <strong className="text-soft">3.</strong> Pegala acá abajo: se guarda cifrada en
+              el servidor y nunca vuelve al navegador.
+            </p>
+          </div>
           <Button onClick={() => setAddOpen(true)}>
             <Plus size={15} className="inline mr-1.5 -mt-0.5" />
             Añadir cuenta

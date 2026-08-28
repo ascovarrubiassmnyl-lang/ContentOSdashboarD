@@ -138,7 +138,7 @@ export default function Sidebar({
         {user && <UserMenu user={user} />}
         <p className="text-[11px] text-muted">
           v1.0 · <span className="text-positive">●</span>{' '}
-          {process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Producción' : 'Modo demo'}
+          {user && user.id !== 'local-dev' ? 'Producción' : 'Modo demo'}
         </p>
       </div>
     </aside>

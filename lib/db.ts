@@ -1,11 +1,11 @@
 // Almacén de datos con dos backends intercambiables:
 //   · Local (./data/*.json)  — desarrollo y modo demo, sin dependencias.
-//   · Supabase (tabla app_store, jsonb por colección) — producción.
+//   · Postgres (tabla app_store, jsonb por colección) — producción.
 // La interfaz es la misma; el backend se elige según las variables de
 // entorno. Todas las funciones son async para soportar ambos.
 import fs from 'fs';
 import path from 'path';
-import { isSupabaseConfigured, supabaseAdmin } from './supabase';
+import { ensureSchema, isDbConfigured, pool } from './pg';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -34,51 +34,52 @@ function fileWrite(name: string, value: unknown): void {
   );
 }
 
-// ── Backend Supabase (tabla app_store: key text pk, value jsonb) ──
+// ── Backend Postgres (tabla app_store: key text pk, value jsonb) ──
 async function kvGet(name: string): Promise<unknown | null> {
-  const { data, error } = await supabaseAdmin()
-    .from('app_store')
-    .select('value')
-    .eq('key', name)
-    .maybeSingle();
-  if (error) throw new Error(`Supabase (leer ${name}): ${error.message}`);
-  return data?.value ?? null;
+  await ensureSchema();
+  const { rows } = await pool().query<{ value: unknown }>(
+    'SELECT value FROM app_store WHERE key = $1',
+    [name]
+  );
+  return rows[0]?.value ?? null;
 }
 
 async function kvSet(name: string, value: unknown): Promise<void> {
-  const { error } = await supabaseAdmin()
-    .from('app_store')
-    .upsert({ key: name, value, updated_at: new Date().toISOString() });
-  if (error) throw new Error(`Supabase (guardar ${name}): ${error.message}`);
+  await ensureSchema();
+  await pool().query(
+    `INSERT INTO app_store (key, value, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [name, JSON.stringify(value)]
+  );
 }
 
 // ── Interfaz pública (idéntica en ambos backends) ───────────
 export async function readCollection<T>(name: string, fallback: T[] = []): Promise<T[]> {
-  const raw = isSupabaseConfigured() ? await kvGet(name) : fileRead(name);
+  const raw = isDbConfigured() ? await kvGet(name) : fileRead(name);
   return Array.isArray(raw) ? (raw as T[]) : fallback;
 }
 
 export async function writeCollection<T>(name: string, rows: T[]): Promise<void> {
-  if (isSupabaseConfigured()) await kvSet(name, rows);
+  if (isDbConfigured()) await kvSet(name, rows);
   else fileWrite(name, rows);
 }
 
 export async function readSingleton<T>(name: string): Promise<T | null> {
-  const raw = isSupabaseConfigured() ? await kvGet(name) : fileRead(name);
+  const raw = isDbConfigured() ? await kvGet(name) : fileRead(name);
   return (raw as T) ?? null;
 }
 
 export async function writeSingleton<T>(name: string, value: T): Promise<void> {
-  if (isSupabaseConfigured()) await kvSet(name, value);
+  if (isDbConfigured()) await kvSet(name, value);
   else fileWrite(name, value);
 }
 
 // Borra una clave entera. Se usa al eliminar una cuenta: cada colección suya
 // vive en su propia clave con namespace, así que basta con borrarlas.
 export async function deleteKey(name: string): Promise<void> {
-  if (isSupabaseConfigured()) {
-    const { error } = await supabaseAdmin().from('app_store').delete().eq('key', name);
-    if (error) throw new Error(`Supabase (borrar ${name}): ${error.message}`);
+  if (isDbConfigured()) {
+    await ensureSchema();
+    await pool().query('DELETE FROM app_store WHERE key = $1', [name]);
     return;
   }
   ensureDir();

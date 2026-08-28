@@ -3,10 +3,13 @@
 import { AlertTriangle } from 'lucide-react';
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabaseBrowser } from '@/lib/supabase-browser';
+import { signIn } from 'next-auth/react';
 
+// Códigos que devuelve Auth.js en ?error=
 const URL_ERRORS: Record<string, string> = {
-  enlace_invalido: 'No se pudo iniciar sesión. Intenta de nuevo.',
+  OAuthAccountNotLinked: 'Ese correo ya entró antes con otro método.',
+  AccessDenied: 'Cancelaste el acceso en la pantalla de Google.',
+  Configuration: 'El login con Google no está bien configurado en el servidor.',
 };
 
 function GoogleIcon() {
@@ -45,15 +48,13 @@ function LoginForm() {
     if (pending) return;
     setPending(true);
     setError(null);
-    const { error } = await supabaseBrowser().auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (error) {
-      setError(error.message);
+    try {
+      await signIn('google', { callbackUrl: '/resumen' });
+      // Si sale bien, el navegador ya va camino a Google.
+    } catch (err) {
+      setError((err as Error).message);
       setPending(false);
     }
-    // Si no hay error, el navegador redirige a Google — no queda nada que hacer.
   };
 
   return (
