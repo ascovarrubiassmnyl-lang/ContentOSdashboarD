@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { uid } from '@/lib/db';
-import { activeWorkspace, readFor, writeFor } from '@/lib/accounts';
+import { readFor, writeFor } from '@/lib/accounts';
+import { requireWorkspace } from '@/lib/session';
 import { seedIfNeeded } from '@/lib/mock';
 import { Idea } from '@/types';
 
@@ -11,7 +12,9 @@ const ideaSchema = z.object({
 });
 
 export async function GET() {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   await seedIfNeeded(ws);
   const ideas = (await readFor<Idea>(ws, 'ideas')).sort((a, b) =>
     b.created_at.localeCompare(a.created_at)
@@ -20,7 +23,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   await seedIfNeeded(ws);
   const parsed = ideaSchema.safeParse(await req.json());
   if (!parsed.success) {

@@ -41,13 +41,22 @@ const FORMAT_ICON: Record<string, typeof Film> = {
 };
 
 export default function ResumenPage() {
-  const { data: metrics, isError: metricsFailed } = useQuery<MetricsResponse>({
+  const {
+    data: metrics,
+    isError: metricsFailed,
+    error: metricsError,
+  } = useQuery<MetricsResponse>({
     queryKey: ['metrics', '7d'],
     // Sin este check, un 500 devuelve HTML, `.json()` revienta y la página se
-    // queda cargando para siempre sin decir qué pasó.
+    // queda cargando para siempre sin decir qué pasó. Un 409 (sin ninguna
+    // cuenta conectada todavía) sí trae un mensaje claro — se propaga tal
+    // cual en vez de taparlo con uno genérico.
     queryFn: async () => {
       const res = await fetch('/api/metrics?period=7d');
-      if (!res.ok) throw new Error('No se pudieron cargar las métricas');
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || 'No se pudieron cargar las métricas');
+      }
       return res.json();
     },
   });
@@ -70,7 +79,8 @@ export default function ResumenPage() {
         <div className="card border-negative/40 bg-negative/5 p-6 mt-10 max-w-lg mx-auto text-center">
           <p className="font-bold text-negative mb-1">No se pudieron cargar las métricas</p>
           <p className="text-sm text-muted mb-4">
-            {conn?.syncError ??
+            {(metricsError as Error)?.message ||
+              conn?.syncError ||
               'Revisa el estado de la conexión de esta cuenta y vuelve a sincronizar.'}
           </p>
           <Link href="/conexion">

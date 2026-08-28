@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import AccountSwitcher from './AccountSwitcher';
+import UserMenu from './UserMenu';
+import type { SessionUser } from '@/lib/auth';
 
 const clientViews: { href: string | null; label: string; icon: typeof Home }[] = [
   { href: '/resumen', label: 'Resumen', icon: Home },
@@ -86,9 +88,11 @@ function NavGroup({
 export default function Sidebar({
   open = false,
   onClose,
+  user,
 }: {
   open?: boolean;
   onClose?: () => void;
+  user?: SessionUser | null;
 }) {
   const pathname = usePathname();
   return (
@@ -131,6 +135,7 @@ export default function Sidebar({
         />
       </div>
       <div className="px-5 py-4 border-t border-line">
+        {user && <UserMenu user={user} />}
         <p className="text-[11px] text-muted">
           v1.0 · <span className="text-positive">●</span>{' '}
           {process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Producción' : 'Modo demo'}

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { activeWorkspace, readFor } from '@/lib/accounts';
+import { readFor } from '@/lib/accounts';
+import { requireWorkspace } from '@/lib/session';
 import { seedIfNeeded } from '@/lib/mock';
 import { MediaPost } from '@/types';
 
@@ -7,7 +8,9 @@ import { MediaPost } from '@/types';
 // /api/metrics solo devuelve recortes (top 5, últimos 8) porque alimenta el
 // dashboard; la galería necesita el catálogo completo.
 export async function GET() {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   await seedIfNeeded(ws);
   const posts = (await readFor<MediaPost>(ws, 'media_posts')).sort((a, b) =>
     b.published_at.localeCompare(a.published_at)

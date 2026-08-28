@@ -1,6 +1,7 @@
-// Protección de toda la app con Supabase Auth + allowlist de un solo
-// usuario (OWNER_EMAIL). Solo se activa cuando las variables de Supabase
-// están configuradas — en local/demo la app queda abierta.
+// Protección de toda la app con Supabase Auth. Login con Google, abierto a
+// cualquier cuenta (sin allowlist) — el aislamiento de datos por usuario vive
+// en la capa de aplicación (ver lib/accounts.ts). Solo se activa cuando las
+// variables de Supabase están configuradas — en local/demo la app queda abierta.
 import { createServerClient } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -11,10 +12,9 @@ const PUBLIC_PREFIXES = ['/login', '/auth', '/api/auth', '/api/cron', '/api/heal
 export async function middleware(req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const owner = process.env.OWNER_EMAIL;
 
   // Auth desactivada (desarrollo local / demo)
-  if (!url || !anon || !owner) return NextResponse.next();
+  if (!url || !anon) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
@@ -52,15 +52,6 @@ export async function middleware(req: NextRequest) {
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
     }
     return toLogin();
-  }
-
-  // Allowlist: solo el dueño puede usar la app
-  if (user.email?.toLowerCase() !== owner.toLowerCase()) {
-    await supabase.auth.signOut();
-    if (pathname.startsWith('/api')) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-    }
-    return toLogin('no_autorizado');
   }
 
   return res;

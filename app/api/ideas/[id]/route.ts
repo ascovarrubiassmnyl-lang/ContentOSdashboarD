@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { activeWorkspace, readFor, writeFor } from '@/lib/accounts';
+import { readFor, writeFor } from '@/lib/accounts';
+import { requireWorkspace } from '@/lib/session';
 import { Idea } from '@/types';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -13,7 +14,9 @@ const patchSchema = z.object({
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
@@ -28,7 +31,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   const ideas = await readFor<Idea>(ws, 'ideas');
   await writeFor(
     ws,

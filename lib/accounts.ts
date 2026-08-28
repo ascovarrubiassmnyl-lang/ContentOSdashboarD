@@ -17,6 +17,7 @@ import {
   writeSingleton,
 } from './db';
 import { decryptSecret, encryptSecret, hasEncryptionKey } from './crypto';
+import { isAuthEnabled } from './supabase';
 import { IgAccount } from '@/types';
 
 export interface Workspace {
@@ -30,6 +31,9 @@ export interface Workspace {
   avatar_url: string | null;
   created_at: string;
   last_sync_at: string | null;
+  // Dueño (uuid de Supabase Auth). `null` = todavía sin reclamar — solo pasa
+  // con datos creados antes del login multiusuario (ver claimLegacyWorkspaces).
+  owner_user_id: string | null;
 }
 
 const ACCOUNTS_KEY = 'accounts';
@@ -99,6 +103,10 @@ async function bootstrapLegacy(): Promise<Workspace | null> {
     avatar_url: null,
     created_at: existing?.last_sync_at ?? new Date().toISOString(),
     last_sync_at: existing?.last_sync_at ?? null,
+    // Sin login real (modo demo local) no hay nadie que la reclame: queda
+    // directo del único usuario fijo del modo demo. Con login real, queda
+    // sin dueño hasta que LEGACY_OWNER_EMAIL la reclame (ver claimLegacyWorkspaces).
+    owner_user_id: isAuthEnabled() ? null : 'local-dev',
   };
   await writeCollection<Workspace>(ACCOUNTS_KEY, [ws]);
   return ws;
@@ -106,6 +114,53 @@ async function bootstrapLegacy(): Promise<Workspace | null> {
 
 export async function getAccount(id: string): Promise<Workspace | null> {
   return (await listAccounts()).find((w) => w.id === id) ?? null;
+}
+
+// ── Por usuario (aislamiento multiusuario) ─────────────────
+// Sin login (modo demo local) las cuentas sin dueño son del único usuario que
+// existe: así una instalación local que ya tenía datos sigue viéndolos. Con
+// login real, una cuenta sin dueño no es de nadie hasta que la reclamen.
+function owns(w: Workspace, userId: string): boolean {
+  if (w.owner_user_id) return w.owner_user_id === userId;
+  return !isAuthEnabled();
+}
+
+export async function listAccountsForUser(userId: string): Promise<Workspace[]> {
+  return (await listAccounts()).filter((w) => owns(w, userId));
+}
+
+// Igual que getAccount, pero exige que la cuenta sea del usuario. Devuelve
+// null tanto si no existe como si es de otro usuario — a propósito: así
+// ninguna ruta puede usar el mensaje de error para adivinar ids ajenos.
+export async function getAccountForUser(
+  id: string,
+  userId: string
+): Promise<Workspace | null> {
+  const ws = await getAccount(id);
+  return ws && owns(ws, userId) ? ws : null;
+}
+
+// La primera vez que entra el correo de LEGACY_OWNER_EMAIL, le asigna todos
+// los Workspaces que todavía no tienen dueño (los que existían antes de este
+// cambio). Es idempotente: una vez reclamados, no vuelve a hacer nada.
+export async function claimLegacyWorkspaces(
+  userId: string,
+  email: string
+): Promise<number> {
+  const legacyOwnerEmail = process.env.LEGACY_OWNER_EMAIL;
+  if (!legacyOwnerEmail || legacyOwnerEmail.toLowerCase() !== email.toLowerCase()) {
+    return 0;
+  }
+  const rows = await listAccounts();
+  let claimed = 0;
+  for (const w of rows) {
+    if (!w.owner_user_id) {
+      w.owner_user_id = userId;
+      claimed++;
+    }
+  }
+  if (claimed > 0) await saveAccounts(rows);
+  return claimed;
 }
 
 export async function saveAccounts(rows: Workspace[]): Promise<void> {
@@ -131,6 +186,7 @@ export async function createAccount(input: {
   followers?: number;
   avatarUrl?: string | null;
   apiKey: string;
+  ownerUserId: string;
 }): Promise<Workspace> {
   const rows = await listAccounts();
   const id = `acc_${input.zernioAccountId}`;
@@ -147,6 +203,7 @@ export async function createAccount(input: {
     avatar_url: input.avatarUrl ?? null,
     created_at: new Date().toISOString(),
     last_sync_at: null,
+    owner_user_id: input.ownerUserId,
   };
   await setZernioKey(id, input.apiKey);
   await saveAccounts([...rows, ws]);
@@ -172,10 +229,12 @@ export async function deleteAccount(id: string): Promise<void> {
 }
 
 // ── Cuenta activa (cookie) ──────────────────────────────────
-export async function activeWorkspace(): Promise<Workspace> {
-  const all = await listAccounts();
-  if (all.length === 0) {
-    throw new Error('No hay ninguna cuenta configurada.');
+// Resuelve solo entre las cuentas del usuario: una cookie con el id de la
+// cuenta de otro usuario ya no puede "colarse" (era el bug de aislamiento).
+export async function activeWorkspace(userId: string): Promise<Workspace> {
+  const mine = await listAccountsForUser(userId);
+  if (mine.length === 0) {
+    throw new Error('SIN_WORKSPACE');
   }
   let selected: string | undefined;
   try {
@@ -183,7 +242,7 @@ export async function activeWorkspace(): Promise<Workspace> {
   } catch {
     // fuera de contexto de petición — cae a la primera cuenta
   }
-  return all.find((w) => w.id === selected) ?? all[0];
+  return mine.find((w) => w.id === selected) ?? mine[0];
 }
 
 // ── Secretos (API keys de Zernio, cifradas en reposo) ───────

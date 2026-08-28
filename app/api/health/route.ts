@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { hasEncryptionKey } from '@/lib/crypto';
+import { isAuthEnabled } from '@/lib/supabase';
 
 // Healthcheck para el despliegue (Railway lo consulta al arrancar).
 // A propósito NO toca la base de datos: un healthcheck que escribe puede
@@ -17,7 +18,7 @@ export function GET() {
       encryption: hasEncryptionKey(),
       claude: Boolean(process.env.ANTHROPIC_API_KEY),
       cron: Boolean(process.env.CRON_SECRET),
-      auth: Boolean(process.env.OWNER_EMAIL),
+      auth: isAuthEnabled(),
     },
   });
 }

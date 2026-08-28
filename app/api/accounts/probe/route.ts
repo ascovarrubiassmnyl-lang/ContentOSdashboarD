@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { listAccounts } from '@/lib/accounts';
+import { listAccountsForUser } from '@/lib/accounts';
+import { getSessionUser } from '@/lib/auth';
 import { listInstagramAccounts, toAccountOption } from '@/lib/zernio';
 
 const schema = z.object({ apiKey: z.string().min(10).max(400) });
 
 // Valida una API key de Zernio y devuelve las cuentas de Instagram que tiene
-// conectadas, marcando las que ya están añadidas aquí. La key NO se guarda:
-// solo se usa para esta consulta; se persiste al crear la cuenta.
+// conectadas, marcando las que el usuario ya tiene añadidas. La key NO se
+// guarda: solo se usa para esta consulta; se persiste al crear la cuenta.
 export async function POST(req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: 'API key inválida' }, { status: 400 });
@@ -24,7 +30,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existing = new Set((await listAccounts()).map((w) => w.id));
+  const existing = new Set((await listAccountsForUser(user.id)).map((w) => w.id));
   const options = raw.map(toAccountOption).map((o) => ({
     ...o,
     alreadyAdded: existing.has(`acc_${o.id}`),

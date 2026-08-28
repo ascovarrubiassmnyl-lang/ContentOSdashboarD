@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildMetrics } from '@/lib/metrics';
-import { activeWorkspace } from '@/lib/accounts';
+import { requireWorkspace } from '@/lib/session';
 import { Period } from '@/types';
 
 export async function GET(req: NextRequest) {
@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
   if (!['today', '7d', '30d'].includes(period)) {
     return NextResponse.json({ error: 'Periodo inválido' }, { status: 400 });
   }
-  const ws = await activeWorkspace();
-  return NextResponse.json(await buildMetrics(ws, period));
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  return NextResponse.json(await buildMetrics(r.ws, period));
 }

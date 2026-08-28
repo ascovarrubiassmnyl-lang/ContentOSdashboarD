@@ -122,9 +122,28 @@ export default function AccountSwitcher({ onNavigate }: { onNavigate?: () => voi
   const accounts = data?.accounts ?? [];
   const active = accounts.find((a) => a.active) ?? accounts[0];
 
-  if (isLoading || !active) {
+  if (isLoading) {
     return (
       <div className="mx-3 mb-5 h-[52px] rounded-xl border border-line bg-bg/40 animate-pulse" />
+    );
+  }
+
+  // Usuario nuevo: todavía no conectó ninguna cuenta de Instagram.
+  if (!active) {
+    return (
+      <Link
+        href="/conexion"
+        onClick={onNavigate}
+        className="mx-3 mb-5 flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 text-left hover:border-primary/70 transition-all"
+      >
+        <span className="h-8 w-8 rounded-lg border border-dashed border-primary/50 text-primary flex items-center justify-center shrink-0">
+          <Plus size={16} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-bold truncate">Conectá tu primera cuenta</span>
+          <span className="block text-[11px] text-muted truncate">Cuenta de Instagram</span>
+        </span>
+      </Link>
     );
   }
 

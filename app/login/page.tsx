@@ -1,44 +1,59 @@
 'use client';
 
-import { AlertTriangle, Mail, Send } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Button, Spinner } from '@/components/ui';
+import { supabaseBrowser } from '@/lib/supabase-browser';
 
 const URL_ERRORS: Record<string, string> = {
-  no_autorizado: 'Ese correo no está autorizado para acceder a este dashboard.',
-  enlace_invalido: 'El enlace expiró o no es válido. Pide uno nuevo.',
+  enlace_invalido: 'No se pudo iniciar sesión. Intenta de nuevo.',
 };
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62Z"
+      />
+      <path
+        fill="#34A853"
+        d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.33A9 9 0 0 0 9 18Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.95A9 9 0 0 0 0 9c0 1.45.35 2.83.95 4.03l3-2.33Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .95 4.97l3 2.33C4.66 5.17 6.65 3.58 9 3.58Z"
+      />
+    </svg>
+  );
+}
 
 function LoginForm() {
   const params = useSearchParams();
   const urlError = params.get('error');
 
-  const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(
     urlError ? URL_ERRORS[urlError] ?? 'Error de acceso.' : null
   );
 
   const submit = async () => {
-    if (!email.trim() || pending) return;
+    if (pending) return;
     setPending(true);
     setError(null);
-    try {
-      const res = await fetch('/api/auth/request-link', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Error');
-      setSent(true);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
+    const { error } = await supabaseBrowser().auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) {
+      setError(error.message);
       setPending(false);
     }
+    // Si no hay error, el navegador redirige a Google — no queda nada que hacer.
   };
 
   return (
@@ -46,58 +61,27 @@ function LoginForm() {
       <p className="text-2xl font-extrabold tracking-tight text-center">
         Content <span className="text-primary">OS</span>
       </p>
-      <p className="text-xs text-muted text-center mt-1 mb-8">
-        Command Center
-      </p>
+      <p className="text-xs text-muted text-center mt-1 mb-8">Command Center</p>
 
-      {sent ? (
-        <div className="text-center py-6">
-          <span className="h-12 w-12 rounded-2xl bg-positive/15 text-positive flex items-center justify-center mx-auto mb-4">
-            <Mail size={22} />
-          </span>
-          <p className="font-bold mb-1">Revisa tu correo</p>
-          <p className="text-sm text-muted">
-            Te enviamos un enlace de acceso a{' '}
-            <span className="text-soft font-semibold">{email}</span>. Ábrelo para entrar.
-          </p>
-        </div>
-      ) : (
-        <>
-          <label className="block mb-4">
-            <span className="section-label block mb-1.5">Correo electrónico</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && submit()}
-              placeholder="tu@correo.com"
-              className="w-full bg-bg border border-line rounded-xl px-3.5 py-2.5 text-sm focus:border-primary focus:outline-none placeholder:text-muted/50"
-              autoFocus
-            />
-          </label>
-          <Button className="w-full" onClick={submit} disabled={pending || !email.trim()}>
-            {pending ? (
-              <span className="flex items-center justify-center gap-2">
-                <Spinner /> Enviando…
-              </span>
-            ) : (
-              <>
-                <Send size={14} className="inline mr-1.5 -mt-0.5" />
-                Enviarme el enlace de acceso
-              </>
-            )}
-          </Button>
-          {error && (
-            <p className="flex items-start gap-2 text-xs text-negative mt-4">
-              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-              {error}
-            </p>
-          )}
-          <p className="text-[11px] text-muted text-center mt-6">
-            Acceso restringido — solo el correo autorizado puede entrar.
-          </p>
-        </>
+      <button
+        onClick={submit}
+        disabled={pending}
+        className="w-full flex items-center justify-center gap-2.5 bg-white text-[#1F1F1F] font-semibold text-sm rounded-xl px-4 py-3 hover:bg-white/90 transition-all disabled:opacity-60"
+      >
+        <GoogleIcon />
+        {pending ? 'Redirigiendo…' : 'Continuar con Google'}
+      </button>
+
+      {error && (
+        <p className="flex items-start gap-2 text-xs text-negative mt-4">
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          {error}
+        </p>
       )}
+
+      <p className="text-[11px] text-muted text-center mt-6">
+        Entrá con tu cuenta de Google para crear o abrir tu espacio de trabajo.
+      </p>
     </div>
   );
 }
@@ -105,7 +89,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <div className="fixed inset-0 z-[60] bg-bg flex items-center justify-center px-4">
-      <Suspense fallback={<Spinner />}>
+      <Suspense fallback={null}>
         <LoginForm />
       </Suspense>
     </div>

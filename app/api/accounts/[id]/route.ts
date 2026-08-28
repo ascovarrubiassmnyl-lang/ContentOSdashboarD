@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { deleteAccount, getAccount, setZernioKey, updateAccount } from '@/lib/accounts';
+import { deleteAccount, getAccountForUser, setZernioKey, updateAccount } from '@/lib/accounts';
+import { getSessionUser } from '@/lib/auth';
 import { hasEncryptionKey } from '@/lib/crypto';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -13,7 +14,15 @@ const patchSchema = z
   })
   .partial();
 
+// Nota: "cuenta no encontrada" y "cuenta de otro usuario" devuelven el mismo
+// 404 — no confirmar la existencia de un id ajeno evita que se puedan
+// enumerar cuentas de otros usuarios.
 export async function PATCH(req: NextRequest, ctx: Ctx) {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
   const { id } = await ctx.params;
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -24,6 +33,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
   const { apiKey, ...fields } = parsed.data;
 
+  const owned = await getAccountForUser(id, user.id);
+  if (!owned) {
+    return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 });
+  }
+
   if (apiKey) {
     if (!hasEncryptionKey()) {
       return NextResponse.json(
@@ -31,13 +45,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         { status: 503 }
       );
     }
-    if (!(await getAccount(id))) {
-      return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 });
-    }
     await setZernioKey(id, apiKey);
   }
 
-  const updated = Object.keys(fields).length ? await updateAccount(id, fields) : await getAccount(id);
+  const updated = Object.keys(fields).length ? await updateAccount(id, fields) : owned;
   if (!updated) {
     return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 });
   }
@@ -47,7 +58,17 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 // Elimina la cuenta Y todos sus datos (métricas, ideas, calendario,
 // guiones y reportes). No se puede borrar la última cuenta que queda.
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
   const { id } = await ctx.params;
+  const owned = await getAccountForUser(id, user.id);
+  if (!owned) {
+    return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 });
+  }
+
   try {
     await deleteAccount(id);
   } catch (err) {

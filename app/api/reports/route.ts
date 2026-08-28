@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { activeWorkspace, readFor } from '@/lib/accounts';
+import { readFor } from '@/lib/accounts';
+import { requireWorkspace } from '@/lib/session';
 import { seedIfNeeded } from '@/lib/mock';
 import { generateReport } from '@/lib/reports';
 import { Report } from '@/types';
@@ -11,14 +12,18 @@ const reportSchema = z.object({
 });
 
 export async function GET() {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   await seedIfNeeded(ws);
   const reports = await readFor<Report>(ws, 'reports');
   return NextResponse.json({ reports });
 }
 
 export async function POST(req: NextRequest) {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   await seedIfNeeded(ws);
   const parsed = reportSchema.safeParse(await req.json());
   if (!parsed.success) {

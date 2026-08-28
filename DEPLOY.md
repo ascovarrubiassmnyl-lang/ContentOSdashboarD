@@ -33,6 +33,7 @@ ejecuta el código.
    | `ENCRYPTION_KEY` | ⚠️ **la MISMA de `.env.local`** — si cambia, las API keys de Zernio guardadas dejan de descifrarse |
    | `CRON_SECRET` | |
    | `ANTHROPIC_API_KEY` | opcional, activa la IA real |
+   | `LEGACY_OWNER_EMAIL` | opcional, una sola vez — ver "Login con Google" |
 
 4. **Settings → Networking → Generate Domain** para obtener la URL pública.
 5. Comprueba `https://<tu-url>/api/health`: debe responder `ok: true` y mostrar
@@ -64,6 +65,36 @@ allí y desactiva el Cron Trigger de Cloudflare (`triggers.crons` en
 
 ---
 
+## Login con Google
+
+El login es con Google OAuth, abierto a cualquier cuenta (sin allowlist de
+correos) — es multiusuario: cada quien ve solo las cuentas de Instagram que
+conectó. Se configura una sola vez por proyecto de Supabase:
+
+1. **Google Cloud Console** → [console.cloud.google.com](https://console.cloud.google.com)
+   → crea (o reusa) un proyecto → **APIs & Services → Credentials → Create
+   Credentials → OAuth client ID** → tipo **Web application**.
+   - **Authorized JavaScript origins**: la URL de producción y
+     `http://localhost:3333`.
+   - **Authorized redirect URIs**: `https://<tu-proyecto>.supabase.co/auth/v1/callback`
+     (Supabase te la muestra tal cual en el paso siguiente).
+2. **Supabase Dashboard → Authentication → Providers → Google**: actívalo,
+   pega el **Client ID** y el **Client Secret** que te dio Google Cloud Console.
+3. **Supabase Dashboard → Authentication → URL Configuration**: confirma que
+   **Site URL** y **Redirect URLs** incluyen `http://localhost:3333/auth/callback`
+   y `https://<tu-dominio-producción>/auth/callback`.
+4. En las variables de entorno de la app, `LEGACY_OWNER_EMAIL` (opcional):
+   el correo del equipo con el que van a entrar primero — la primera vez que
+   entra ese correo, reclama automáticamente las cuentas de Instagram que ya
+   existían antes de este login (p. ej. `@scav_86`). Después de esa primera
+   entrada se puede borrar la variable; no vuelve a hacer nada.
+
+Sin `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` configuradas
+(modo demo local), no hay login: la app corre abierta con un usuario fijo,
+igual que siempre.
+
+---
+
 # B) Cloudflare Workers
 
 ## Requisitos previos (cuentas)
@@ -81,7 +112,8 @@ allí y desactiva el Cron Trigger de Cloudflare (`triggers.crons` en
 
 1. Crea un proyecto en supabase.com (región cercana, p. ej. `us-east-1`).
 2. **SQL Editor** → pega y ejecuta `supabase/migrations/002_app_store.sql`.
-3. **Authentication → Providers**: activa **Email** (magic link).
+3. **Authentication → Providers → Google**: seguí la guía de la sección
+   "Login con Google" más arriba.
 4. **Authentication → URL Configuration**: agrega la URL de producción como
    Site URL (cuando la tengas) y `http://localhost:3333` en Redirect URLs.
 5. **Settings → API**: copia estos 3 valores:
@@ -89,11 +121,11 @@ allí y desactiva el Cron Trigger de Cloudflare (`triggers.crons` en
    - `anon` public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (⚠️ secreta, solo servidor)
 
-**Prueba local antes del deploy:** pega esas 3 variables + `OWNER_EMAIL` en
-`.env.local`, reinicia el servidor y verifica que (a) te pide login, (b) el
-magic link a tu correo entra, (c) los datos se guardan en Supabase (tabla
-`app_store` se va llenando). Después sincroniza desde /conexion para poblar
-la BD con tus datos reales.
+**Prueba local antes del deploy:** pega esas 3 variables en `.env.local`,
+reiniciá el servidor y verificá que (a) te pide login con Google, (b) entrás
+con tu cuenta y llegás a /resumen (o a /conexion si es tu primera vez), (c)
+los datos se guardan en Supabase (tabla `app_store` se va llenando). Después
+sincroniza desde /conexion para poblar la BD con tus datos reales.
 
 ## Paso 2 — Cloudflare Workers
 
@@ -124,12 +156,11 @@ Pasos (vía Workers Builds):
    desde la app. Genérala con `openssl rand -hex 32` y usa la MISMA que en
    `.env.local` — si no, las cuentas guardadas en local no se descifran en
    producción y hay que volver a pegar su key desde Conexión.
-   **Login (opcional, hoy desactivado):** la app solo pide login si defines
-   `OWNER_EMAIL`. Sin esa variable, la URL queda abierta a quien la tenga.
-   Alternativa sin tocar la app: **Cloudflare Access** (Zero Trust → Access)
-   protege el dominio con tu cuenta de Google antes de llegar a la app.
+   **Login:** la app pide login automáticamente en cuanto configuras las 3
+   variables de Supabase — ver "Login con Google" más arriba.
 5. Retry build / push → te da la URL `https://<worker>.workers.dev`.
-6. (Solo si reactivas el login) Supabase → URL Configuration → Site URL.
+6. Supabase → Authentication → URL Configuration → agrega esa URL a Site URL
+   y a Redirect URLs (con `/auth/callback`).
 
 ⚠️ **Producción requiere Supabase configurado**: en Workers no existe disco,
 así que el modo local de archivos JSON no funciona ahí. Sin las variables de
@@ -155,8 +186,10 @@ Opción B — **cron-job.org** (más simple, sin código): job diario a la URL
 
 ## Paso 4 — Verificación final
 
-- [ ] Entrar desde el celular a la URL de producción → pide login
-- [ ] Magic link al correo del dueño → entra; otro correo → rechazado
+- [ ] Entrar desde el celular a la URL de producción → pide login con Google
+- [ ] Login con Google entra con cualquier cuenta; el correo de
+      `LEGACY_OWNER_EMAIL` reclama las cuentas de Instagram preexistentes al
+      entrar la primera vez
 - [ ] /conexion → Sincronizar ahora → métricas reales
 - [ ] Subir un PDF en Fuentes → texto extraído
 - [ ] Generar un guion en el chat

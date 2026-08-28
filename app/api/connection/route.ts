@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server';
-import {
-  activeWorkspace,
-  hasZernioFor,
-  readSingletonFor,
-  writeSingletonFor,
-} from '@/lib/accounts';
+import { hasZernioFor, readSingletonFor, writeSingletonFor } from '@/lib/accounts';
+import { requireWorkspace } from '@/lib/session';
 import { seedIfNeeded, touchSync } from '@/lib/mock';
 import { syncFromZernio } from '@/lib/zernio';
 import { IgAccount } from '@/types';
@@ -12,7 +8,9 @@ import { IgAccount } from '@/types';
 // Fuente de datos de la CUENTA ACTIVA: Zernio (Instagram real) si esa cuenta
 // tiene API key propia (o hereda la del entorno); si no, demo.
 export async function GET() {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   const real = await hasZernioFor(ws);
   if (!real) await seedIfNeeded(ws);
 
@@ -46,7 +44,9 @@ export async function GET() {
 
 // Sincronizar ahora (la cuenta activa)
 export async function POST() {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   if (await hasZernioFor(ws)) {
     try {
       const result = await syncFromZernio(ws);
@@ -67,7 +67,9 @@ export async function POST() {
 
 // Desconectar (local — la conexión real se gestiona en el panel de Zernio)
 export async function DELETE() {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   const account = await readSingletonFor<IgAccount>(ws, 'account');
   if (account) {
     account.connected = false;
@@ -78,7 +80,9 @@ export async function DELETE() {
 
 // Reconectar
 export async function PATCH() {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   const account = await readSingletonFor<IgAccount>(ws, 'account');
   if (account) {
     account.connected = true;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { activeWorkspace, readFor, writeFor } from '@/lib/accounts';
+import { readFor, writeFor } from '@/lib/accounts';
+import { requireWorkspace } from '@/lib/session';
 import { CalendarItem } from '@/types';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -21,7 +22,9 @@ const patchSchema = z
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json(
@@ -39,7 +42,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   const items = await readFor<CalendarItem>(ws, 'calendar_items');
   await writeFor(
     ws,

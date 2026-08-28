@@ -5,16 +5,26 @@ import {
   ACTIVE_COOKIE,
   activeWorkspace,
   createAccount,
-  listAccounts,
+  listAccountsForUser,
   zernioKeyState,
 } from '@/lib/accounts';
+import { getSessionUser } from '@/lib/auth';
 import { hasEncryptionKey } from '@/lib/crypto';
 import { syncFromZernio } from '@/lib/zernio';
 
 // La API key JAMÁS sale de aquí: solo se informa si existe y de dónde viene.
 export async function GET() {
-  const accounts = await listAccounts();
-  const active = await activeWorkspace();
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
+  const accounts = await listAccountsForUser(user.id);
+  if (accounts.length === 0) {
+    return NextResponse.json({ accounts: [], activeId: null });
+  }
+
+  const active = await activeWorkspace(user.id);
   const rows = await Promise.all(
     accounts.map(async (ws) => ({
       id: ws.id,
@@ -42,6 +52,11 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
   if (!hasEncryptionKey()) {
     return NextResponse.json(
       {
@@ -61,7 +76,7 @@ export async function POST(req: NextRequest) {
 
   let ws;
   try {
-    ws = await createAccount(parsed.data);
+    ws = await createAccount({ ...parsed.data, ownerUserId: user.id });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 409 });
   }

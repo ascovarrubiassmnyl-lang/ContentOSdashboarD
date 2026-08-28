@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { uid } from '@/lib/db';
-import { activeWorkspace, readFor, writeFor } from '@/lib/accounts';
+import { readFor, writeFor } from '@/lib/accounts';
+import { requireWorkspace } from '@/lib/session';
 import { seedIfNeeded } from '@/lib/mock';
 import { filterExpired } from '@/lib/maintenance';
 import { CalendarItem } from '@/types';
@@ -18,7 +19,9 @@ const itemSchema = z.object({
 
 // Limpieza automática (piezas con más de 24 h vencidas) en cada lectura.
 export async function GET() {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   await seedIfNeeded(ws);
   const all = await readFor<CalendarItem>(ws, 'calendar_items');
   const { kept, removed } = filterExpired(all);
@@ -28,7 +31,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const ws = await activeWorkspace();
+  const r = await requireWorkspace();
+  if ('error' in r) return r.error;
+  const ws = r.ws;
   await seedIfNeeded(ws);
   const parsed = itemSchema.safeParse(await req.json());
   if (!parsed.success) {

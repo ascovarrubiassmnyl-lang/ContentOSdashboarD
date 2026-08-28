@@ -78,16 +78,20 @@ export default function ConexionPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<AccountRow | null>(null);
 
-  const { data, isLoading } = useQuery<ConnectionResponse>({
-    queryKey: ['connection'],
-    queryFn: async () => (await fetch('/api/connection')).json(),
-  });
-
-  const accountsQuery = useQuery<{ accounts: AccountRow[]; activeId: string }>({
+  const accountsQuery = useQuery<{ accounts: AccountRow[]; activeId: string | null }>({
     queryKey: ['accounts'],
     queryFn: async () => (await fetch('/api/accounts')).json(),
   });
   const accounts = accountsQuery.data?.accounts ?? [];
+  // Usuario nuevo sin ninguna cuenta todavía: /api/connection depende de una
+  // cuenta activa (409 si no hay ninguna) — no tiene sentido pedirla.
+  const hasAccounts = accountsQuery.isSuccess && accounts.length > 0;
+
+  const { data, isLoading } = useQuery<ConnectionResponse>({
+    queryKey: ['connection'],
+    queryFn: async () => (await fetch('/api/connection')).json(),
+    enabled: hasAccounts,
+  });
 
   const refreshEverything = () => {
     qc.clear();
@@ -166,6 +170,25 @@ export default function ConexionPage() {
           Añadir cuenta
         </Button>
       </div>
+
+      {/* Usuario nuevo: todavía no conectó ninguna cuenta — este es el camino
+          principal, no un caso raro detrás de una lista vacía. */}
+      {!accountsQuery.isLoading && accounts.length === 0 && (
+        <div className="card p-8 mb-6 text-center max-w-xl mx-auto">
+          <span className="h-14 w-14 rounded-2xl bg-primary/15 text-primary flex items-center justify-center mx-auto mb-4">
+            <Plug size={26} />
+          </span>
+          <h2 className="text-lg font-extrabold mb-1.5">Conectá tu primera cuenta de Instagram</h2>
+          <p className="text-sm text-muted leading-relaxed mb-6">
+            Todavía no tenés ninguna cuenta conectada a este espacio de trabajo. Conectala vía
+            Zernio para empezar a ver métricas reales, ideas y calendario.
+          </p>
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus size={15} className="inline mr-1.5 -mt-0.5" />
+            Añadir cuenta
+          </Button>
+        </div>
+      )}
 
       {/* Conectada en Zernio pero SIN datos: casi siempre es un problema de
           plan/permisos en Zernio, no de la app. Hay que decirlo con claridad. */}
@@ -312,7 +335,11 @@ export default function ConexionPage() {
         {/* ── Estado de la cuenta activa ── */}
         <Card className="col-span-12 lg:col-span-5" glow={false}>
           <p className="section-label mb-4">Estado de la cuenta activa</p>
-          {isLoading ? (
+          {!hasAccounts ? (
+            <p className="text-sm text-muted py-4">
+              Conectá una cuenta para ver su estado acá.
+            </p>
+          ) : isLoading ? (
             <div className="flex justify-center py-10">
               <Spinner />
             </div>
