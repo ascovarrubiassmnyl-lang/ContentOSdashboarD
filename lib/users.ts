@@ -47,6 +47,41 @@ export async function findUserById(id: string): Promise<AppUser | null> {
   return (await listUsers()).find((u) => u.id === id) ?? null;
 }
 
+// Garantiza que exista la fila del usuario que YA tiene sesión abierta.
+//
+// Hace falta porque las sesiones abiertas antes de que existiera este registro
+// son válidas (van firmadas en la cookie) pero no tienen fila: sin esto, quien
+// entró con Google antes del despliegue no podría ponerse contraseña hasta
+// cerrar sesión y volver a entrar.
+//
+// Solo se llama con una sesión ya verificada, así que crear la fila no concede
+// nada: el `id` de la sesión es el que Google emitió y el que ya usan sus
+// workspaces.
+export async function ensureUser(session: {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl: string | null;
+}): Promise<AppUser> {
+  const rows = await listUsers();
+  const found = rows.find((u) => u.id === session.id);
+  if (found) return found;
+
+  const user: AppUser = {
+    id: session.id,
+    email: normalizeEmail(session.email),
+    name: session.name,
+    password_hash: null,
+    // Sin fila previa y con sesión válida, la única puerta que existía era
+    // Google; en esa puerta el id de sesión ES el `sub`.
+    google_sub: session.id,
+    avatar_url: session.avatarUrl,
+    created_at: new Date().toISOString(),
+  };
+  await saveUsers([...rows, user]);
+  return user;
+}
+
 // ── Alta con contraseña ─────────────────────────────────────
 export class RegistrationError extends Error {}
 

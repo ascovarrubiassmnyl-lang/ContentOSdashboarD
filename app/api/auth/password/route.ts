@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSessionUser, isPasswordEnabled } from '@/lib/auth';
 import { MIN_PASSWORD_LENGTH } from '@/lib/password';
-import { RegistrationError, findUserById, setPassword } from '@/lib/users';
+import { RegistrationError, ensureUser, setPassword } from '@/lib/users';
 
 const schema = z.object({
   currentPassword: z.string().max(200).optional(),
@@ -20,12 +20,12 @@ export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
-  const row = await findUserById(user.id);
+  const row = await ensureUser(user);
   return NextResponse.json({
-    email: user.email,
-    name: user.name,
-    hasPassword: Boolean(row?.password_hash),
-    hasGoogle: Boolean(row?.google_sub),
+    email: row.email,
+    name: row.name,
+    hasPassword: Boolean(row.password_hash),
+    hasGoogle: Boolean(row.google_sub),
     enabled: isPasswordEnabled(),
   });
 }
@@ -50,6 +50,9 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
+    // Igual que en el GET: una sesión abierta antes de que existiera el
+    // registro de usuarios todavía no tiene fila.
+    await ensureUser(user);
     await setPassword(user.id, parsed.data.newPassword, parsed.data.currentPassword);
   } catch (err) {
     if (err instanceof RegistrationError) {
