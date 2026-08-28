@@ -147,18 +147,44 @@ export interface ZernioAccountOption {
   avatarUrl: string | null;
 }
 
+// Un texto en blanco es como si no llegara. Hace falta distinguirlo porque `??`
+// no lo cubre: Zernio manda `""` —no `null`— en los campos que la cuenta no
+// tiene, y muchas Páginas de Facebook no tienen nombre de usuario. Ese `""` se
+// colaba hasta el alta y la rechazaba con un "Datos inválidos" sin explicación.
+function firstText(...vals: unknown[]): string {
+  for (const v of vals) {
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+// Los contadores llegan a veces como cadena. Number('') es 0 y Number(undefined)
+// es NaN, así que se normaliza a un entero >= 0 en todos los casos.
+function count(...vals: unknown[]): number {
+  for (const v of vals) {
+    const n = typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN;
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return 0;
+}
+
 export function toAccountOption(a: ZernioAccount): ZernioAccountOption {
   const p = a.metadata?.profileData;
   const platform: Platform = isSupported(a) ? a.platform : 'instagram';
+  // Una Página de Facebook puede no tener nombre de usuario: ahí el nombre
+  // visible ES su identidad, así que se busca primero.
+  const name =
+    platform === 'facebook'
+      ? firstText(a.displayName, p?.displayName, a.username, p?.username)
+      : firstText(p?.username, a.username, a.displayName, p?.displayName);
   return {
     id: a._id,
     platform,
-    // Una Página de Facebook puede no tener nombre de usuario: ahí el nombre
-    // visible ES su identidad.
-    username: p?.username ?? a.username ?? a.displayName ?? p?.displayName ?? platform,
-    displayName: p?.displayName ?? a.displayName ?? '',
-    followers: a.followersCount ?? p?.followersCount ?? 0,
-    avatarUrl: a.profilePicture ?? p?.profilePicture ?? null,
+    // Último recurso para que nunca vaya vacío: sin nombre, el id la identifica.
+    username: (name || `${platform}-${a._id.slice(-6)}`).slice(0, 80),
+    displayName: firstText(p?.displayName, a.displayName),
+    followers: count(a.followersCount, p?.followersCount),
+    avatarUrl: firstText(a.profilePicture, p?.profilePicture) || null,
   };
 }
 
