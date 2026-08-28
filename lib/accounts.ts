@@ -187,9 +187,12 @@ export async function createAccount(input: {
   return ws;
 }
 
-export async function deleteAccount(id: string): Promise<void> {
+export async function deleteAccount(id: string, userId: string): Promise<void> {
   const rows = await listAccounts();
-  if (rows.length <= 1) {
+  // La regla es "no te quedes sin ninguna cuenta", así que cuenta las TUYAS.
+  // Contando todas las del sistema, un usuario con una sola cuenta podía
+  // borrarla en cuanto otro usuario tuviera las suyas.
+  if (rows.filter((w) => owns(w, userId)).length <= 1) {
     throw new Error('No puedes eliminar la única cuenta que queda.');
   }
   const ws = rows.find((w) => w.id === id);

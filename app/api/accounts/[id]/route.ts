@@ -70,7 +70,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   }
 
   try {
-    await deleteAccount(id);
+    await deleteAccount(id, user.id);
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 409 });
   }
