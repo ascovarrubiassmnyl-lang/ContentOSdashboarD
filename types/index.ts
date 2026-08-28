@@ -129,7 +129,12 @@ export interface Idea {
 // Respuesta de /api/connection — describe la CUENTA ACTIVA, no una fija.
 export interface ConnectionResponse {
   account: IgAccount | null;
-  workspace: { id: string; label: string; username: string };
+  workspace: {
+    id: string;
+    label: string;
+    username: string;
+    platform: 'instagram' | 'facebook';
+  };
   source: 'zernio' | 'demo';
   demoMode: boolean;
   realConnected: boolean;

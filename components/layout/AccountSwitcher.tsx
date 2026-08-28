@@ -10,10 +10,13 @@ import { Check, ChevronsUpDown, Plus, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { cn, relativeTime } from '@/lib/utils';
 
+export type Platform = 'instagram' | 'facebook';
+
 export interface AccountRow {
   id: string;
   label: string;
   username: string;
+  platform: Platform;
   color: string;
   followers: number;
   avatar_url: string | null;
@@ -21,6 +24,32 @@ export interface AccountRow {
   legacy: boolean;
   keyState: 'stored' | 'env' | 'none';
   active: boolean;
+}
+
+// El nombre visible de una cuenta. La arroba es de Instagram: una Página de
+// Facebook se llama por su nombre, no "@nombre".
+export function handle(username: string, platform: Platform): string {
+  if (!username) return '';
+  return platform === 'facebook' ? username : `@${username.replace(/^@/, '')}`;
+}
+
+const PLATFORM_STYLE: Record<Platform, { name: string; className: string }> = {
+  instagram: { name: 'IG', className: 'bg-primary/15 text-primary' },
+  facebook: { name: 'FB', className: 'bg-[#1877F2]/20 text-[#4a9bff]' },
+};
+
+export function PlatformBadge({ platform }: { platform: Platform }) {
+  const s = PLATFORM_STYLE[platform] ?? PLATFORM_STYLE.instagram;
+  return (
+    <span
+      className={cn(
+        'text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0',
+        s.className
+      )}
+    >
+      {s.name}
+    </span>
+  );
 }
 
 export function initials(label: string): string {
@@ -35,6 +64,7 @@ export function initials(label: string): string {
 export function accountSubtitle(a: {
   label: string;
   username: string;
+  platform?: Platform;
   followers: number;
   last_sync_at?: string | null;
   keyState?: string;
@@ -45,7 +75,7 @@ export function accountSubtitle(a: {
     if (a.followers > 0) return `${a.followers.toLocaleString('es')} seguidores`;
     return a.last_sync_at ? `sync ${relativeTime(a.last_sync_at)}` : 'sin sincronizar';
   }
-  return `@${a.username}`;
+  return handle(a.username, a.platform ?? 'instagram');
 }
 
 export function AccountAvatar({
@@ -141,7 +171,7 @@ export default function AccountSwitcher({ onNavigate }: { onNavigate?: () => voi
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[13px] font-bold truncate">Conectá tu primera cuenta</span>
-          <span className="block text-[11px] text-muted truncate">Cuenta de Instagram</span>
+          <span className="block text-[11px] text-muted truncate">Instagram o Facebook</span>
         </span>
       </Link>
     );
@@ -163,8 +193,9 @@ export default function AccountSwitcher({ onNavigate }: { onNavigate?: () => voi
         <AccountAvatar label={active.label} color={active.color} />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-bold truncate">{active.label}</span>
-          <span className="block text-[11px] text-muted truncate">
-            {accountSubtitle(active)}
+          <span className="flex items-center gap-1.5 text-[11px] text-muted min-w-0">
+            <PlatformBadge platform={active.platform} />
+            <span className="truncate">{accountSubtitle(active)}</span>
           </span>
         </span>
         <ChevronsUpDown size={15} className="text-muted shrink-0" />
@@ -191,8 +222,9 @@ export default function AccountSwitcher({ onNavigate }: { onNavigate?: () => voi
               <AccountAvatar label={a.label} color={a.color} size={28} />
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-semibold truncate">{a.label}</span>
-                <span className="block text-[10px] text-muted truncate">
-                  {accountSubtitle(a)}
+                <span className="flex items-center gap-1.5 text-[10px] text-muted min-w-0">
+                  <PlatformBadge platform={a.platform} />
+                  <span className="truncate">{accountSubtitle(a)}</span>
                 </span>
               </span>
               {switchTo.isPending && switchTo.variables === a.id ? (

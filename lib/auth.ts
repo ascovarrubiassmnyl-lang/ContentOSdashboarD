@@ -6,6 +6,12 @@
 // multiusuario: las 17 rutas que lo usan no saben (ni les importa) qué
 // proveedor de auth hay detrás.
 import { auth } from '@/auth';
+import { isAuthEnabled } from './auth-flags';
+
+// Se reexporta porque media docena de módulos ya la importan desde aquí; la
+// definición vive en auth-flags.ts para que el middleware (Edge) también pueda
+// usarla sin arrastrar `pg`.
+export { isAuthEnabled, isGoogleEnabled, isPasswordEnabled } from './auth-flags';
 
 export interface SessionUser {
   id: string;
@@ -20,10 +26,6 @@ const LOCAL_DEV_USER: SessionUser = {
   name: 'Demo',
   avatarUrl: null,
 };
-
-export function isAuthEnabled(): boolean {
-  return Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
-}
 
 export async function getSessionUser(): Promise<SessionUser | null> {
   if (!isAuthEnabled()) return LOCAL_DEV_USER;

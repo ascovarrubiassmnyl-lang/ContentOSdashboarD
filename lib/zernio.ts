@@ -1,13 +1,20 @@
 // Integración con Zernio (https://zernio.com) — fuente de datos reales de
-// Instagram SIN necesidad de app de Meta ni Página de Facebook. Zernio trae
-// su propia app aprobada y conecta vía "Instagram Login for Business".
+// Instagram y de Páginas de Facebook, SIN necesidad de app de Meta propia.
+// Zernio trae su propia app aprobada y gestiona la autorización.
 //
 // Auth: Authorization: Bearer <ZERNIO_API_KEY>
 // Endpoints usados:
-//   GET /v1/accounts?platform=instagram   → cuentas conectadas
+//   GET /v1/accounts                                      → cuentas conectadas
 //   GET /v1/analytics?accountId=..&fromDate=..&toDate=..  → analytics por post
+//
+// En ambos endpoints `platform` es OPCIONAL: omitirlo devuelve todas las
+// plataformas. Antes se mandaba `platform=instagram` fijo, y por eso las
+// Páginas de Facebook conectadas en Zernio no aparecían nunca aquí.
 import {
+  PLATFORMS,
+  Platform,
   Workspace,
+  accountPlatform,
   getZernioKey,
   updateAccount,
   writeFor,
@@ -73,6 +80,10 @@ interface ZernioAccount {
   platform: string;
   username?: string;
   displayName?: string;
+  // Imagen de perfil. Ojo: `profileUrl` es el ENLACE al perfil, no la imagen —
+  // se usaba por error como avatar y por eso nunca se veía ninguno.
+  profilePicture?: string | null;
+  profileUrl?: string;
   followersCount?: number;
   isActive?: boolean;
   enabled?: boolean;
@@ -81,6 +92,7 @@ interface ZernioAccount {
       username?: string;
       displayName?: string;
       followersCount?: number;
+      profilePicture?: string;
       profileUrl?: string;
     };
   };
@@ -113,16 +125,22 @@ interface ZernioPost {
   platforms?: { platformPostId?: string; platformPostUrl?: string; analytics?: ZernioAnalyticsBlock }[];
 }
 
-export async function listInstagramAccounts(apiKey: string): Promise<ZernioAccount[]> {
-  const res = await zernioGet<{ accounts?: ZernioAccount[] }>(apiKey, '/v1/accounts', {
-    platform: 'instagram',
-  });
-  return res.accounts ?? [];
+function isSupported(a: ZernioAccount): a is ZernioAccount & { platform: Platform } {
+  return (PLATFORMS as readonly string[]).includes(a.platform);
+}
+
+// Todas las cuentas de la key que ContentOS sabe analizar. Zernio conecta 16
+// plataformas (y varias redes de anuncios); aquí solo interesan Instagram y
+// Facebook, así que el resto se descarta en vez de ofrecerlas y fallar luego.
+export async function listConnectedAccounts(apiKey: string): Promise<ZernioAccount[]> {
+  const res = await zernioGet<{ accounts?: ZernioAccount[] }>(apiKey, '/v1/accounts');
+  return (res.accounts ?? []).filter(isSupported);
 }
 
 // Resumen ligero de una cuenta de Zernio, para el flujo "añadir cuenta".
 export interface ZernioAccountOption {
   id: string;
+  platform: Platform;
   username: string;
   displayName: string;
   followers: number;
@@ -131,12 +149,16 @@ export interface ZernioAccountOption {
 
 export function toAccountOption(a: ZernioAccount): ZernioAccountOption {
   const p = a.metadata?.profileData;
+  const platform: Platform = isSupported(a) ? a.platform : 'instagram';
   return {
     id: a._id,
-    username: p?.username ?? a.username ?? a.displayName ?? 'instagram',
+    platform,
+    // Una Página de Facebook puede no tener nombre de usuario: ahí el nombre
+    // visible ES su identidad.
+    username: p?.username ?? a.username ?? a.displayName ?? p?.displayName ?? platform,
     displayName: p?.displayName ?? a.displayName ?? '',
     followers: a.followersCount ?? p?.followersCount ?? 0,
-    avatarUrl: p?.profileUrl ?? null,
+    avatarUrl: a.profilePicture ?? p?.profilePicture ?? null,
   };
 }
 
@@ -148,9 +170,10 @@ async function fetchAllPosts(
 ): Promise<ZernioPost[]> {
   const all: ZernioPost[] = [];
   for (let page = 1; page <= 20; page++) {
+    // Sin `platform`: ya se filtra por `accountId`, y fijarlo a Instagram
+    // dejaba fuera los posts de las Páginas de Facebook.
     const res = await zernioGet<{ posts?: ZernioPost[] }>(apiKey, '/v1/analytics', {
       accountId,
-      platform: 'instagram',
       fromDate,
       toDate,
       limit: '100',
@@ -254,6 +277,7 @@ export async function syncFromZernio(ws: Workspace): Promise<{
   postsSynced: number;
   followers: number;
 }> {
+  const platform = accountPlatform(ws);
   const apiKey = await getZernioKey(ws);
   if (!apiKey) {
     throw new Error(
@@ -261,10 +285,11 @@ export async function syncFromZernio(ws: Workspace): Promise<{
     );
   }
 
-  const accounts = await listInstagramAccounts(apiKey);
+  const accounts = await listConnectedAccounts(apiKey);
   if (accounts.length === 0) {
     throw new Error(
-      'No hay ninguna cuenta de Instagram conectada en Zernio. Conéctala primero en su dashboard.'
+      'Esta API key no tiene ninguna cuenta de Instagram ni Página de Facebook conectada en ' +
+        'Zernio. Conéctala primero en su panel.'
     );
   }
 
@@ -276,8 +301,8 @@ export async function syncFromZernio(ws: Workspace): Promise<{
     ig = accounts.find((a) => a._id === ws.zernio_account_id);
     if (!ig) {
       throw new Error(
-        `Esta API key de Zernio no contiene la cuenta @${ws.username || ws.label}. ` +
-          `Contiene: ${accounts.map((a) => '@' + (a.metadata?.profileData?.username ?? a.username ?? '?')).join(', ')}. ` +
+        `Esta API key de Zernio no contiene la cuenta ${ws.username || ws.label}. ` +
+          `Contiene: ${accounts.map((a) => toAccountOption(a).username).join(', ')}. ` +
           'Si moviste la cuenta a otra cuenta de Zernio, elimínala aquí y vuelve a añadirla con la key correcta.'
       );
     }
@@ -286,8 +311,9 @@ export async function syncFromZernio(ws: Workspace): Promise<{
     ig = accounts.find((a) => a.enabled !== false && a.isActive !== false) ?? accounts[0];
   }
 
-  const username = ig.metadata?.profileData?.username ?? ig.username ?? ig.displayName ?? 'instagram';
-  const followers = ig.followersCount ?? ig.metadata?.profileData?.followersCount ?? 0;
+  const option = toAccountOption(ig);
+  const username = option.username;
+  const followers = option.followers;
 
   const to = new Date();
   const from = new Date(Date.now() - 90 * 86400_000);
@@ -313,7 +339,9 @@ export async function syncFromZernio(ws: Workspace): Promise<{
     id: ws.id,
     ig_user_id: ig._id,
     username,
-    account_type: 'MEDIA_CREATOR',
+    // Una Página de Facebook siempre es un perfil de negocio; en Instagram la
+    // cuenta tiene que ser Creator o Business para que haya métricas.
+    account_type: platform === 'facebook' ? 'BUSINESS' : 'MEDIA_CREATOR',
     token_expires_at: new Date(Date.now() + 60 * 86400_000).toISOString(),
     last_sync_at: syncedAt,
     connected: true,
@@ -326,7 +354,7 @@ export async function syncFromZernio(ws: Workspace): Promise<{
     followers,
     last_sync_at: syncedAt,
     zernio_account_id: ig._id,
-    avatar_url: ig.metadata?.profileData?.profileUrl ?? ws.avatar_url,
+    avatar_url: option.avatarUrl ?? ws.avatar_url,
   });
 
   return { account: username, postsSynced: posts.length, followers };

@@ -23,9 +23,9 @@ del mismo proyecto; el servicio web solo ejecuta el código.
    | Variable | Nota |
    |---|---|
    | `DATABASE_URL` | referencia al Postgres: `${{Postgres.DATABASE_URL}}` |
-   | `AUTH_GOOGLE_ID` | Client ID de Google — ver "Login con Google" |
-   | `AUTH_GOOGLE_SECRET` | secreta |
-   | `AUTH_SECRET` | `openssl rand -base64 32` |
+   | `AUTH_SECRET` | `openssl rand -base64 32`. Activa el login por contraseña; si cambia, se cierran todas las sesiones abiertas |
+   | `AUTH_GOOGLE_ID` | opcional, añade el botón de Google — ver "Login (Auth.js)" |
+   | `AUTH_GOOGLE_SECRET` | opcional, secreta |
    | `AUTH_URL` | la URL pública de la app, sin barra final |
    | `ENCRYPTION_KEY` | ⚠️ cifra las API keys de Zernio. Si cambia, las guardadas dejan de descifrarse y cada usuario tiene que volver a pegar la suya |
    | `CRON_SECRET` | |
@@ -55,21 +55,38 @@ llama al endpoint y termina.
 Si falla, el script sale con código 1 y Railway marca la ejecución como fallida
 en lugar de aparentar que fue bien.
 
-## Cambiar el dominio
+## Dominio propio
 
-Mientras validas Railway puedes dejar Cloudflare corriendo: son independientes y
-comparten la misma base de datos. Cuando Railway responda bien, apunta tu dominio
-allí y desactiva el Cron Trigger de Cloudflare (`triggers.crons` en
-`wrangler.jsonc`) para que no sincronicen los dos a la vez.
+**Settings → Networking → Custom Domain** en el servicio web, y añade el CNAME
+que indique Railway. Después actualiza `AUTH_URL` con el dominio nuevo y añade
+`https://<dominio>/api/auth/callback/google` a las URIs autorizadas del OAuth
+Client, o el login con Google dejará de funcionar.
 
 ---
 
-## Login con Google (Auth.js)
+## Login (Auth.js)
 
-El login es con Google, abierto a cualquier cuenta (sin allowlist): es
-multiusuario, cada quien ve solo las cuentas de Instagram que conectó.
-No hace falta Supabase ni ningún otro proveedor — Auth.js corre dentro de
-la propia app, con sesiones JWT firmadas en la cookie.
+Hay **dos métodos y conviven**: correo con contraseña, y Google. Los dos son
+abiertos (sin allowlist) y multiusuario: cada quien ve solo las cuentas que
+conectó. No hace falta Supabase ni ningún otro proveedor — Auth.js corre dentro
+de la propia app, con sesiones JWT firmadas en la cookie.
+
+La identidad es el **correo**: si entras con Google y luego te defines una
+contraseña desde `/cuenta`, sigues siendo el mismo usuario con los mismos datos.
+
+### Correo y contraseña
+
+Se activa solo con definir `AUTH_SECRET`. No hay nada más que configurar.
+
+Quien ya entró con Google se pone contraseña desde **/cuenta**; el registro
+público rechaza a propósito los correos que ya entran con Google, porque
+permitirlo dejaría secuestrar una cuenta sabiendo solo el correo.
+
+⚠️ Todavía **no hay recuperación de contraseña por correo** (haría falta un
+proveedor de email). Quien tenga Google vinculado puede entrar por ahí y
+redefinirla.
+
+### Google (opcional)
 
 1. **Google Cloud Console** → [console.cloud.google.com](https://console.cloud.google.com)
    → **APIs & Services → Credentials → Create Credentials → OAuth client ID**
@@ -84,8 +101,10 @@ la propia app, con sesiones JWT firmadas en la cookie.
 4. `AUTH_URL` = la URL pública de la app, sin barra final. Hace falta porque
    Railway sirve detrás de un proxy.
 
-Sin `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` la app corre sin login, en modo
-demo con un usuario fijo — que es como funciona en local.
+Sin `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` el botón de Google no aparece y el
+login sigue funcionando con contraseña. Sin **ninguna** de las tres variables la
+app corre sin login, en modo demo con un usuario fijo — que es como funciona en
+local.
 
 ## Base de datos (Postgres)
 

@@ -4,6 +4,7 @@
 // necesita ser cliente (onClick) mientras Sidebar sigue leyendo el usuario
 // desde el servidor.
 import { useState } from 'react';
+import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth';
@@ -25,22 +26,29 @@ export default function UserMenu({ user }: { user: SessionUser }) {
 
   return (
     <div className="flex items-center gap-2.5 mb-3">
-      {user.avatarUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={user.avatarUrl}
-          alt=""
-          className="h-8 w-8 rounded-lg object-cover shrink-0 border border-line"
-        />
-      ) : (
-        <span className="h-8 w-8 rounded-lg bg-primary/15 text-primary border border-primary/30 flex items-center justify-center text-xs font-extrabold shrink-0">
-          {initials(user.name)}
+      {/* El nombre lleva a /cuenta: es donde se define o cambia la contraseña. */}
+      <Link
+        href="/cuenta"
+        title="Tu cuenta y contraseña"
+        className="flex items-center gap-2.5 min-w-0 flex-1 rounded-lg -m-1 p-1 hover:bg-line/40 transition-all"
+      >
+        {user.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={user.avatarUrl}
+            alt=""
+            className="h-8 w-8 rounded-lg object-cover shrink-0 border border-line"
+          />
+        ) : (
+          <span className="h-8 w-8 rounded-lg bg-primary/15 text-primary border border-primary/30 flex items-center justify-center text-xs font-extrabold shrink-0">
+            {initials(user.name)}
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-semibold truncate">{user.name}</span>
+          <span className="block text-[11px] text-muted truncate">{user.email}</span>
         </span>
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-semibold truncate">{user.name}</span>
-        <span className="block text-[11px] text-muted truncate">{user.email}</span>
-      </span>
+      </Link>
       <button
         onClick={leave}
         disabled={pending}

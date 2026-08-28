@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { hasZernioFor, readSingletonFor, writeSingletonFor } from '@/lib/accounts';
+import {
+  accountPlatform,
+  hasZernioFor,
+  readSingletonFor,
+  writeSingletonFor,
+} from '@/lib/accounts';
 import { requireWorkspace } from '@/lib/session';
 import { seedIfNeeded, touchSync } from '@/lib/mock';
 import { syncFromZernio } from '@/lib/zernio';
@@ -33,7 +38,12 @@ export async function GET() {
 
   return NextResponse.json({
     account,
-    workspace: { id: ws.id, label: ws.label, username: ws.username },
+    workspace: {
+      id: ws.id,
+      label: ws.label,
+      username: ws.username,
+      platform: accountPlatform(ws),
+    },
     source: real ? 'zernio' : 'demo',
     demoMode: !real,
     realConnected: real,

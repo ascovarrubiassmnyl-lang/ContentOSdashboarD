@@ -1,13 +1,13 @@
 // Registro de cuentas (workspaces) — soporte multicuenta.
 //
-// Cada cuenta es una cuenta de Instagram conectada a través de una cuenta de
-// Zernio (con su propia API key). Los datos de cada una viven en claves
-// separadas del almacén: `ideas__acc_123`, `calendar_items__acc_123`, etc.
+// Cada cuenta es una cuenta de Instagram o una Página de Facebook conectada a
+// través de una cuenta de Zernio (con su propia API key). Los datos de cada una
+// viven en claves separadas del almacén: `ideas__acc_123`, etc.
 //
 // La PRIMERA cuenta (la que ya existía antes del multicuenta) se marca como
 // `legacy` y conserva las claves SIN sufijo (`ideas`, `calendar_items`…), de
-// modo que los datos actuales de @scav_86 siguen exactamente donde estaban:
-// no hay migración que pueda salir mal.
+// modo que los datos que ya estaban siguen exactamente donde estaban: no hay
+// migración que pueda salir mal.
 import { cookies } from 'next/headers';
 import {
   deleteKey,
@@ -20,20 +20,33 @@ import { decryptSecret, encryptSecret, hasEncryptionKey } from './crypto';
 import { isAuthEnabled } from './auth';
 import { IgAccount } from '@/types';
 
+// Redes que ContentOS sabe analizar. Zernio conecta muchas más, pero el resto
+// (anuncios, mensajería…) no encaja en este dashboard.
+export const PLATFORMS = ['instagram', 'facebook'] as const;
+export type Platform = (typeof PLATFORMS)[number];
+
 export interface Workspace {
   id: string; // 'acc_<idZernio>'
   label: string; // nombre visible, editable por el usuario
-  username: string; // @usuario de Instagram
+  username: string; // @usuario de Instagram, o nombre de la Página de Facebook
   zernio_account_id: string | null; // _id de la cuenta dentro de Zernio
   color: string; // acento en el selector
   legacy?: boolean; // usa claves sin sufijo + ZERNIO_API_KEY del entorno
+  // Opcional porque las cuentas creadas antes del soporte de Facebook no lo
+  // traen; leerlas con accountPlatform() las trata como Instagram.
+  platform?: Platform;
   followers: number;
   avatar_url: string | null;
   created_at: string;
   last_sync_at: string | null;
-  // Dueño (uuid de Supabase Auth). `null` = todavía sin reclamar — solo pasa
-  // con datos creados antes del login multiusuario (ver claimLegacyWorkspaces).
+  // Dueño: el id del usuario en lib/users.ts. `null` = sin dueño; solo pasa con
+  // datos creados antes del login multiusuario, y con auth activa no son de
+  // nadie (ver owns()).
   owner_user_id: string | null;
+}
+
+export function accountPlatform(ws: Workspace): Platform {
+  return ws.platform === 'facebook' ? 'facebook' : 'instagram';
 }
 
 const ACCOUNTS_KEY = 'accounts';
@@ -103,9 +116,9 @@ async function bootstrapLegacy(): Promise<Workspace | null> {
     avatar_url: null,
     created_at: existing?.last_sync_at ?? new Date().toISOString(),
     last_sync_at: existing?.last_sync_at ?? null,
-    // Sin login real (modo demo local) no hay nadie que la reclame: queda
-    // directo del único usuario fijo del modo demo. Con login real, queda
-    // sin dueño hasta que LEGACY_OWNER_EMAIL la reclame (ver claimLegacyWorkspaces).
+    // Sin login real (modo demo local) es del único usuario fijo del modo demo.
+    // Con login real nace sin dueño, y una cuenta sin dueño no es de nadie: así
+    // un usuario nuevo no hereda por accidente los datos de otro.
     owner_user_id: isAuthEnabled() ? null : 'local-dev',
   };
   await writeCollection<Workspace>(ACCOUNTS_KEY, [ws]);
@@ -159,6 +172,7 @@ export async function updateAccount(
 export async function createAccount(input: {
   zernioAccountId: string;
   username: string;
+  platform?: Platform;
   label?: string;
   followers?: number;
   avatarUrl?: string | null;
@@ -167,15 +181,18 @@ export async function createAccount(input: {
 }): Promise<Workspace> {
   const rows = await listAccounts();
   const id = `acc_${input.zernioAccountId}`;
+  const platform: Platform = input.platform === 'facebook' ? 'facebook' : 'instagram';
   if (rows.some((w) => w.id === id)) {
-    throw new Error(`La cuenta @${input.username} ya está añadida.`);
+    throw new Error(`La cuenta ${input.username} ya está añadida.`);
   }
   const ws: Workspace = {
     id,
-    label: input.label?.trim() || `@${input.username}`,
+    // La arroba es de Instagram: una Página de Facebook se llama por su nombre.
+    label: input.label?.trim() || (platform === 'facebook' ? input.username : `@${input.username}`),
     username: input.username,
     zernio_account_id: input.zernioAccountId,
     color: PALETTE[rows.length % PALETTE.length],
+    platform,
     followers: input.followers ?? 0,
     avatar_url: input.avatarUrl ?? null,
     created_at: new Date().toISOString(),

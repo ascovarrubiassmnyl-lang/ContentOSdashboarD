@@ -3,6 +3,8 @@ import { cookies } from 'next/headers';
 import { z } from 'zod';
 import {
   ACTIVE_COOKIE,
+  PLATFORMS,
+  accountPlatform,
   activeWorkspace,
   createAccount,
   listAccountsForUser,
@@ -30,6 +32,7 @@ export async function GET() {
       id: ws.id,
       label: ws.label,
       username: ws.username,
+      platform: accountPlatform(ws),
       color: ws.color,
       followers: ws.followers,
       avatar_url: ws.avatar_url,
@@ -46,9 +49,17 @@ const createSchema = z.object({
   apiKey: z.string().min(10).max(400),
   zernioAccountId: z.string().min(1).max(120),
   username: z.string().min(1).max(80),
+  platform: z.enum(PLATFORMS).optional(),
   label: z.string().max(60).optional(),
   followers: z.number().int().min(0).optional(),
-  avatarUrl: z.string().url().nullable().optional(),
+  // Solo se pinta como <img src>. Se descarta lo que no sea http(s) en vez de
+  // rechazar la petición: un avatar raro no debería impedir añadir la cuenta.
+  avatarUrl: z
+    .string()
+    .max(600)
+    .nullable()
+    .optional()
+    .transform((v) => (v && /^https?:\/\//.test(v) ? v : null)),
 });
 
 export async function POST(req: NextRequest) {

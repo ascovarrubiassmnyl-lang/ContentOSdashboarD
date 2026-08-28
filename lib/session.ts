@@ -20,7 +20,7 @@ export async function requireWorkspace(): Promise<Ok | Fail> {
     if ((err as Error).message === 'SIN_WORKSPACE') {
       return {
         error: NextResponse.json(
-          { error: 'Todavía no conectaste ninguna cuenta de Instagram.' },
+          { error: 'Todavía no conectaste ninguna cuenta.' },
           { status: 409 }
         ),
       };

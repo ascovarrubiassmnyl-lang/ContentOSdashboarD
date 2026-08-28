@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { listAccountsForUser } from '@/lib/accounts';
 import { getSessionUser } from '@/lib/auth';
-import { listInstagramAccounts, toAccountOption } from '@/lib/zernio';
+import { listConnectedAccounts, toAccountOption } from '@/lib/zernio';
 
 const schema = z.object({ apiKey: z.string().min(10).max(400) });
 
-// Valida una API key de Zernio y devuelve las cuentas de Instagram que tiene
-// conectadas, marcando las que el usuario ya tiene añadidas. La key NO se
-// guarda: solo se usa para esta consulta; se persiste al crear la cuenta.
+// Valida una API key de Zernio y devuelve las cuentas de Instagram y Páginas de
+// Facebook que tiene conectadas, marcando las que el usuario ya tiene añadidas.
+// La key NO se guarda: solo se usa para esta consulta; se persiste al crear la
+// cuenta.
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) {
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
 
   let raw;
   try {
-    raw = await listInstagramAccounts(parsed.data.apiKey.trim());
+    raw = await listConnectedAccounts(parsed.data.apiKey.trim());
   } catch (err) {
     return NextResponse.json(
       { error: `No se pudo conectar con Zernio: ${(err as Error).message}` },
@@ -40,7 +41,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          'Esa API key no tiene ninguna cuenta de Instagram conectada. Conéctala primero en el panel de Zernio.',
+          'Esa API key no tiene ninguna cuenta de Instagram ni Página de Facebook conectada. ' +
+          'Conéctala primero en el panel de Zernio.',
       },
       { status: 404 }
     );

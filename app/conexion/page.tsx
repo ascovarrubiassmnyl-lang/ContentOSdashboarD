@@ -19,12 +19,19 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button, Card, Input, Modal, Spinner } from '@/components/ui';
-import { AccountAvatar, AccountRow } from '@/components/layout/AccountSwitcher';
+import {
+  AccountAvatar,
+  AccountRow,
+  Platform,
+  PlatformBadge,
+  handle,
+} from '@/components/layout/AccountSwitcher';
 import { ConnectionResponse } from '@/types';
 import { fmtInt, relativeTime } from '@/lib/utils';
 
 interface ZernioOption {
   id: string;
+  platform: Platform;
   username: string;
   displayName: string;
   followers: number;
@@ -46,12 +53,12 @@ const FLOW_STEPS = [
   {
     n: 1,
     title: 'Cuenta profesional',
-    desc: 'La cuenta de Instagram debe ser Creator o Business — requisito para que Instagram entregue métricas.',
+    desc: 'En Instagram, la cuenta debe ser Creator o Business — requisito de Instagram para entregar métricas. En Facebook tiene que ser una Página, no un perfil personal.',
   },
   {
     n: 2,
     title: 'Conexión en Zernio',
-    desc: 'La cuenta se autoriza en zernio.com con "Instagram Login for Business" — sin cuenta de Facebook ni app de Meta propia.',
+    desc: 'La cuenta se autoriza en zernio.com. Zernio pone su propia app de Meta: no hace falta crear una.',
   },
   {
     n: 3,
@@ -169,7 +176,7 @@ export default function ConexionPage() {
     <div>
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <p className="accent-label mb-1">Datos reales de Instagram</p>
+          <p className="accent-label mb-1">Datos reales de Instagram y Facebook</p>
           <h1 className="text-xl font-extrabold">Conexión de API ⭐</h1>
           <p className="text-sm text-muted mt-1">
             Cada cuenta se conecta con su propia API key de Zernio y tiene sus datos aparte.
@@ -188,16 +195,17 @@ export default function ConexionPage() {
           <span className="h-14 w-14 rounded-2xl bg-primary/15 text-primary flex items-center justify-center mx-auto mb-4">
             <Plug size={26} />
           </span>
-          <h2 className="text-lg font-extrabold mb-1.5">Conectá tu primera cuenta de Instagram</h2>
+          <h2 className="text-lg font-extrabold mb-1.5">Conectá tu primera cuenta</h2>
           <p className="text-sm text-muted leading-relaxed mb-5">
             Para traer tus métricas reales hace falta una sola credencial: tu{' '}
             <strong className="text-soft">API key de Zernio</strong>. Zernio es el puente con
-            Instagram — evita tener que crear una app de Meta o conectar una Página de Facebook.
+            Instagram y con las Páginas de Facebook — evita tener que crear tu propia app de
+            Meta.
           </p>
           <div className="text-left text-xs text-muted bg-bg border border-line rounded-xl px-4 py-3.5 mb-6 space-y-1.5">
             <p>
-              <strong className="text-soft">1.</strong> Tu cuenta de Instagram tiene que ser
-              Creator o Business (requisito de Instagram para dar métricas).
+              <strong className="text-soft">1.</strong> En Instagram, la cuenta tiene que ser
+              Creator o Business. En Facebook, una Página.
             </p>
             <p>
               <strong className="text-soft">2.</strong> Conectala en{' '}
@@ -298,16 +306,17 @@ export default function ConexionPage() {
                 >
                   <AccountAvatar label={a.label} color={a.color} size={36} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold truncate">
-                      {a.label}
+                    <p className="text-sm font-bold truncate flex items-center gap-2">
+                      <PlatformBadge platform={a.platform} />
+                      <span className="truncate">{a.label}</span>
                       {a.active && (
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-2 py-0.5 rounded-full ml-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-2 py-0.5 rounded-full shrink-0">
                           Activa
                         </span>
                       )}
                     </p>
                     <p className="text-[11px] text-muted truncate">
-                      {a.username ? `@${a.username}` : 'sin sincronizar'}
+                      {a.username ? handle(a.username, a.platform) : 'sin sincronizar'}
                       {a.followers > 0 && ` · ${fmtInt(a.followers)} seguidores`}
                       {' · '}
                       {a.keyState === 'none' ? (
@@ -404,7 +413,7 @@ export default function ConexionPage() {
                 </div>
                 <div>
                   <p className="font-extrabold">
-                    @{account.username}{' '}
+                    {handle(account.username, data?.workspace?.platform ?? 'instagram')}{' '}
                     <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-2 py-0.5 rounded-full ml-1">
                       {account.account_type}
                     </span>
@@ -431,7 +440,11 @@ export default function ConexionPage() {
                   <CheckCircle2 size={13} />
                   Fuente:{' '}
                   <span className="text-soft font-semibold">
-                    {data?.source === 'zernio' ? 'Zernio · Instagram real' : 'Datos demo'}
+                    {data?.source === 'zernio'
+                    ? `Zernio · ${
+                        data.workspace?.platform === 'facebook' ? 'Facebook' : 'Instagram'
+                      } real`
+                    : 'Datos demo'}
                   </span>
                 </div>
               </div>
@@ -582,8 +595,10 @@ function AddAccountModal({
           apiKey,
           zernioAccountId: opt.id,
           username: opt.username,
+          platform: opt.platform,
           label: label.trim() || undefined,
           followers: opt.followers,
+          avatarUrl: opt.avatarUrl,
         }),
       });
       const json = await res.json();
@@ -604,14 +619,14 @@ function AddAccountModal({
         reset();
         onClose();
       }}
-      title="Añadir cuenta de Instagram"
+      title="Añadir cuenta"
     >
       {!options ? (
         <>
           <p className="text-xs text-muted mb-4 leading-relaxed">
-            Pega la API key de la cuenta de Zernio donde está conectada esa cuenta de
-            Instagram. Puede ser la misma key que ya usas (si tiene varias cuentas de IG) o
-            la de otra cuenta de Zernio distinta. Se guarda cifrada en el servidor.
+            Pega la API key de la cuenta de Zernio donde está conectada la cuenta. Aparecerán
+            todas sus cuentas de Instagram y Páginas de Facebook. Puede ser la misma key que
+            ya usas o la de otra cuenta de Zernio distinta. Se guarda cifrada en el servidor.
           </p>
           <Input
             label="API key de Zernio"
@@ -642,7 +657,7 @@ function AddAccountModal({
       ) : (
         <>
           <p className="text-xs text-muted mb-4">
-            Cuentas de Instagram conectadas a esa key. Elige cuál quieres añadir:
+            Cuentas conectadas a esa key. Elige cuál quieres añadir:
           </p>
           <div className="space-y-2 mb-4">
             {options.map((o) => (
@@ -654,7 +669,10 @@ function AddAccountModal({
               >
                 <AccountAvatar label={o.username} color="#7C7CF5" size={34} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold truncate">@{o.username}</p>
+                  <p className="text-sm font-bold truncate flex items-center gap-2">
+                    <PlatformBadge platform={o.platform} />
+                    <span className="truncate">{handle(o.username, o.platform)}</span>
+                  </p>
                   <p className="text-[11px] text-muted truncate">
                     <Users size={11} className="inline mr-1 -mt-0.5" />
                     {fmtInt(o.followers)} seguidores
