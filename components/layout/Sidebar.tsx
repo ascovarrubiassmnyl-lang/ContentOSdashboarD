@@ -27,7 +27,7 @@ const clientViews: { href: string | null; label: string; icon: typeof Home }[] =
 const adminViews: { href: string | null; label: string; icon: typeof Home }[] = [
   { href: '/ideas', label: 'Banco de ideas', icon: Lightbulb },
   { href: '/calendario', label: 'Calendario', icon: CalendarDays },
-  { href: '/conexion', label: 'Conexión IG', icon: Plug },
+  { href: '/conexion', label: 'Integraciones', icon: Plug },
 ];
 
 function NavGroup({

@@ -4,8 +4,10 @@
 // Combina métricas 7d, lo más destacado, próximas piezas y último reporte.
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import {
   ArrowRight,
+  Bell,
   CalendarDays,
   Clock,
   Eye,
@@ -18,6 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Button, Card, DeltaBadge, Spinner } from '@/components/ui';
+import NotificationsPanel from '@/components/NotificationsPanel';
 import {
   CalendarItem,
   ConnectionResponse,
@@ -41,6 +44,7 @@ const FORMAT_ICON: Record<string, typeof Film> = {
 };
 
 export default function ResumenPage() {
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const {
     data: metrics,
     isError: metricsFailed,
@@ -148,18 +152,9 @@ export default function ResumenPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/calendario">
-            <Button>
-              <CalendarDays size={14} className="inline mr-1.5 -mt-0.5" />
-              Agendar pieza
-            </Button>
-          </Link>
-          <Link href="/reportes">
-            <Button variant="secondary">
-              <FileText size={14} className="inline mr-1.5 -mt-0.5" />
-              Generar reporte
-            </Button>
-          </Link>
+          <Button variant="secondary" className="h-10 w-10 p-0 rounded-full flex items-center justify-center text-muted hover:text-foreground" onClick={() => setIsNotifOpen(true)}>
+            <Bell size={18} />
+          </Button>
         </div>
       </div>
 
@@ -318,7 +313,7 @@ export default function ResumenPage() {
         </Card>
 
         {/* ── Último reporte ── */}
-        <Card className="col-span-12 xl:col-span-7" glow={false}>
+        <Card className="col-span-12 xl:col-span-12" glow={false}>
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="accent-label mb-1">Análisis</p>
@@ -359,6 +354,7 @@ export default function ResumenPage() {
         </Card>
 
       </div>
+      <NotificationsPanel open={isNotifOpen} onClose={() => setIsNotifOpen(false)} />
     </div>
   );
 }
