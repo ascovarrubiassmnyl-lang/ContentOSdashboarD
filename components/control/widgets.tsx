@@ -86,7 +86,7 @@ export function TopPosts({ posts }: { posts: MediaPost[] }) {
     1
   );
   return (
-    <Card className="col-span-12 xl:col-span-6">
+    <Card className="col-span-12 xl:col-span-8">
       <p className="accent-label mb-1">Ranking</p>
       <h3 className="font-extrabold mb-4">🏆 Top publicaciones por interacción</h3>
       <div className="space-y-3">
@@ -296,7 +296,7 @@ export function FunnelCard({ funnel }: { funnel: MetricsResponse['funnel'] }) {
 }
 
 // ── 🗓️ Mejores horarios (heatmap) ───────────────────────────
-export function Heatmap({ data }: { data: MetricsResponse['heatmap'] }) {
+export function Heatmap({ data, className }: { data: MetricsResponse['heatmap']; className?: string }) {
   const max = Math.max(...data.flatMap((d) => [d.am, d.pm]), 1);
   const cell = (v: number) => {
     const intensity = v / max;
@@ -313,7 +313,7 @@ export function Heatmap({ data }: { data: MetricsResponse['heatmap'] }) {
     );
   };
   return (
-    <Card className="col-span-12 md:col-span-6 xl:col-span-4">
+    <Card className={cn("col-span-12 md:col-span-6 xl:col-span-4", className)}>
       <p className="accent-label mb-1">Timing</p>
       <h3 className="font-extrabold mb-4">🗓️ Mejores horarios para publicar</h3>
       <div className="grid grid-cols-8 gap-1.5 text-center">
@@ -370,7 +370,7 @@ function PostThumb({ post }: { post: MediaPost }) {
 
 export function PostsPreview({ posts }: { posts: MediaPost[] }) {
   return (
-    <Card className="col-span-12 xl:col-span-8">
+    <Card className="col-span-12 xl:col-span-12">
       <p className="accent-label mb-1">Feed</p>
       <h3 className="font-extrabold mb-4">🖼️ Vista previa — últimas publicaciones</h3>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -402,7 +402,7 @@ export function PostsPreview({ posts }: { posts: MediaPost[] }) {
 }
 
 // ── 🚦 Operación de contenido ────────────────────────────────
-export function OperationCard({ op }: { op: MetricsResponse['operation'] }) {
+export function OperationCard({ op, className }: { op: MetricsResponse['operation']; className?: string }) {
   // Score medio, Bloqueos y Publicables salían de los guiones del generador.
   // Sin esa sección nunca tendrían un valor real: quedan fuera.
   const items = [
@@ -410,7 +410,7 @@ export function OperationCard({ op }: { op: MetricsResponse['operation'] }) {
     { label: 'Listas para salir', value: op.ready, color: 'text-positive' },
   ];
   return (
-    <Card className="col-span-12 xl:col-span-4">
+    <Card className={cn("col-span-12 xl:col-span-4", className)}>
       <p className="accent-label mb-1">Pipeline</p>
       <h3 className="font-extrabold mb-4">🚦 Operación de contenido</h3>
       <div className="space-y-3">

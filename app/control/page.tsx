@@ -181,9 +181,15 @@ export default function ControlPage() {
             {/* Historias: solo si la fuente las entrega */}
             {data.stories.length > 0 && <StoriesCard stories={data.stories} />}
             <FunnelCard funnel={data.funnel} />
-            <Heatmap data={data.heatmap} />
+            <Heatmap 
+              data={data.heatmap} 
+              className={data.stories.length === 0 ? 'xl:col-span-6' : ''} 
+            />
+            <OperationCard 
+              op={data.operation} 
+              className={data.stories.length === 0 ? 'xl:col-span-6' : ''} 
+            />
             <PostsPreview posts={data.recentPosts} />
-            <OperationCard op={data.operation} />
           </div>
         </>
       )}
