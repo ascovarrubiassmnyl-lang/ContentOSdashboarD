@@ -4,7 +4,11 @@
 // mismo estilo que tenía el cliente de Anthropic que reemplaza.
 
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-5';
+// Enrutador de modelos gratuitos de OpenRouter: en vez de apuntar a un modelo
+// concreto que puede estar caído o saturado, OpenRouter elige el gratuito con
+// más disponibilidad en ese momento. Se puede fijar uno concreto con
+// OPENROUTER_MODEL.
+const DEFAULT_MODEL = 'openrouter/free';
 
 export function hasOpenRouterKey(): boolean {
   return Boolean(process.env.OPENROUTER_API_KEY);

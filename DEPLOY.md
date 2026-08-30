@@ -30,7 +30,7 @@ del mismo proyecto; el servicio web solo ejecuta el código.
    | `ENCRYPTION_KEY` | ⚠️ cifra las API keys de Zernio. Si cambia, las guardadas dejan de descifrarse y cada usuario tiene que volver a pegar la suya |
    | `CRON_SECRET` | |
    | `OPENROUTER_API_KEY` | activa el agente (Agente OS: reportes quincenales, chat) |
-   | `OPENROUTER_MODEL` | opcional, default `anthropic/claude-sonnet-5` |
+   | `OPENROUTER_MODEL` | opcional, default `openrouter/free` — el enrutador de modelos gratuitos de OpenRouter, que elige el más disponible en cada momento. Pon el nombre de un modelo concreto para fijarlo |
    | `COMPETITOR_PROVIDER` | opcional, default `instagram-public`. Ponlo en `apify` para que el scraping de competencia funcione de verdad |
    | `APIFY_TOKEN` | activa el análisis de links de video en el chat, y `COMPETITOR_PROVIDER=apify`. Se factura por lectura (~0.003 USD); 10 competidores con el cron diario ≈ 1 USD/mes |
    | `APIFY_INSTAGRAM_ACTOR` | opcional, default `apify~instagram-scraper` |
