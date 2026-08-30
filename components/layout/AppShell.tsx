@@ -3,6 +3,7 @@
 // Shell responsive: en desktop la sidebar es fija; en móvil se convierte en
 // un drawer que se abre con el botón hamburguesa de la barra superior.
 import { ReactNode, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 import type { SessionUser } from '@/lib/auth';
@@ -15,6 +16,12 @@ export default function AppShell({
   user: SessionUser | null;
 }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const isPublicPage = pathname === '/' || pathname === '/login' || pathname === '/offline' || pathname === '/descargar';
+
+  if (isPublicPage) {
+    return <>{children}</>;
+  }
 
   return (
     <>

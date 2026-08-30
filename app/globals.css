@@ -41,3 +41,62 @@ body {
     @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-primary;
   }
 }
+
+/* ── Landing page animations ── */
+@keyframes landingFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landingGlow {
+  0%, 100% {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+@keyframes landingSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.landing-fade-in {
+  animation: landingFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.landing-fade-in-delay-1 {
+  animation: landingFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.landing-fade-in-delay-2 {
+  animation: landingFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+.landing-fade-in-delay-3 {
+  animation: landingFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
+}
+
+.landing-glow {
+  animation: landingGlow 8s ease-in-out infinite;
+}
+
+.landing-slide-down {
+  animation: landingSlideDown 0.3s ease-out;
+}
+

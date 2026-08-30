@@ -1,0 +1,39 @@
+{
+  "name": "ContentOS · Command Center",
+  "short_name": "ContentOS",
+  "description": "Dashboard personal de Instagram — métricas, IA y calendario editorial",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A12",
+  "theme_color": "#0A0A12",
+  "orientation": "portrait",
+  "scope": "/",
+  "lang": "es",
+  "categories": ["productivity", "business", "social"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

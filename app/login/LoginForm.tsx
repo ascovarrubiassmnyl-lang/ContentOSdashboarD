@@ -78,8 +78,9 @@ export default function LoginForm({
   const params = useSearchParams();
   const router = useRouter();
   const urlError = params.get('error');
+  const urlMode = params.get('mode') === 'register' ? 'register' : 'login';
 
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>(urlMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

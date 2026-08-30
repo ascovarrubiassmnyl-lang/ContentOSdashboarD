@@ -13,17 +13,37 @@ import { isAuthEnabled } from './lib/auth-flags';
 
 // /api/health debe seguir siendo público aunque se active el login: si no,
 // el healthcheck del hosting fallaría y el despliegue no arrancaría nunca.
-const PUBLIC_PREFIXES = ['/login', '/api/auth', '/api/cron', '/api/health'];
+const PUBLIC_PREFIXES = [
+  '/login',
+  '/api/auth',
+  '/api/cron',
+  '/api/health',
+  '/offline',
+  '/descargar',
+  '/sw.js',
+  '/manifest.webmanifest',
+];
 
 const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
+  const { pathname } = req.nextUrl;
+
+  // Ruta raíz: si está autenticado, va al dashboard; si no, ve la landing.
+  if (pathname === '/') {
+    if (req.auth) {
+      const dest = req.nextUrl.clone();
+      dest.pathname = '/resumen';
+      return NextResponse.redirect(dest);
+    }
+    return NextResponse.next();
+  }
+
   // Auth desactivada (desarrollo local / demo)
   if (!isAuthEnabled()) {
     return NextResponse.next();
   }
 
-  const { pathname } = req.nextUrl;
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
@@ -43,5 +63,7 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|svg|ico|woff2?)$).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|icons/|.*\\.(?:png|jpg|svg|ico|woff2?|webmanifest|json)$).*)',
+  ],
 };
