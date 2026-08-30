@@ -29,7 +29,11 @@ del mismo proyecto; el servicio web solo ejecuta el código.
    | `AUTH_URL` | la URL pública de la app, sin barra final |
    | `ENCRYPTION_KEY` | ⚠️ cifra las API keys de Zernio. Si cambia, las guardadas dejan de descifrarse y cada usuario tiene que volver a pegar la suya |
    | `CRON_SECRET` | |
-   | `ANTHROPIC_API_KEY` | opcional, activa la IA real |
+   | `OPENROUTER_API_KEY` | activa el agente (Agente OS: reportes quincenales, chat) |
+   | `OPENROUTER_MODEL` | opcional, default `anthropic/claude-sonnet-5` |
+   | `COMPETITOR_PROVIDER` | opcional, default `instagram-public`. Ponlo en `apify` para que el scraping de competencia funcione de verdad |
+   | `APIFY_TOKEN` | activa el análisis de links de video en el chat, y `COMPETITOR_PROVIDER=apify`. Se factura por lectura (~0.003 USD); 10 competidores con el cron diario ≈ 1 USD/mes |
+   | `APIFY_INSTAGRAM_ACTOR` | opcional, default `apify~instagram-scraper` |
 
    `ZERNIO_API_KEY` ya **no** hace falta: cada usuario pega la suya desde la
    app y se guarda cifrada. Solo sirve como fallback de una instalación local.

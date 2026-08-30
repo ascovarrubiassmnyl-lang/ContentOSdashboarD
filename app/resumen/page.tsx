@@ -319,7 +319,7 @@ export default function ResumenPage() {
               <p className="accent-label mb-1">Análisis</p>
               <h3 className="font-extrabold">📊 Último reporte</h3>
             </div>
-            <Link href="/reportes" className="text-xs font-bold text-primary hover:underline">
+            <Link href="/agente" className="text-xs font-bold text-primary hover:underline">
               Todos los reportes →
             </Link>
           </div>
@@ -344,7 +344,7 @@ export default function ResumenPage() {
             <div className="text-center py-6">
               <FileText size={28} className="text-muted/40 mx-auto mb-3" />
               <p className="text-sm text-muted">Aún no hay reportes generados.</p>
-              <Link href="/reportes">
+              <Link href="/agente">
                 <Button variant="secondary" className="mt-3">
                   Generar el primero
                 </Button>

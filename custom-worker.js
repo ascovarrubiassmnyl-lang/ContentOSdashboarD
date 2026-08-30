@@ -18,24 +18,31 @@ export default {
   fetch: handler.fetch,
 
   // Cron Trigger — la cadencia se define en wrangler.jsonc (triggers.crons).
-  // Reutiliza /api/cron/sync, que ya sincroniza TODAS las cuentas y purga los
-  // calendarios. Llamarla por dentro evita una petición de red extra y deja el
-  // CRON_SECRET sin salir nunca del worker.
+  // Reutiliza /api/cron/sync (sincroniza TODAS las cuentas y purga los
+  // calendarios) y /api/cron/reports (genera el reporte quincenal del
+  // agente por cuenta cuando toca). Llamarlas por dentro evita una petición
+  // de red extra y deja el CRON_SECRET sin salir nunca del worker.
   async scheduled(event, env, ctx) {
     const origin = env.CRON_ORIGIN || DEFAULT_ORIGIN;
-    const req = new Request(`${origin}/api/cron/sync`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${env.CRON_SECRET ?? ''}` },
-    });
 
-    try {
+    async function runCron(path) {
+      const req = new Request(`${origin}${path}`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${env.CRON_SECRET ?? ''}` },
+      });
       const res = await handler.fetch(req, env, ctx);
       const body = await res.text();
       // Visible en Observability / `wrangler tail`.
-      console.log(`[cron] ${res.status} ${body.slice(0, 600)}`);
+      console.log(`[cron ${path}] ${res.status} ${body.slice(0, 600)}`);
       if (!res.ok) {
-        throw new Error(`El sync programado devolvió ${res.status}`);
+        throw new Error(`${path} devolvió ${res.status}`);
       }
+    }
+
+    try {
+      await runCron('/api/cron/sync');
+      await runCron('/api/cron/reports');
+      await runCron('/api/cron/competitors');
     } catch (err) {
       // Relanzar marca la ejecución como fallida en el panel de Cloudflare;
       // si se traga el error, un cron roto parece que va bien.

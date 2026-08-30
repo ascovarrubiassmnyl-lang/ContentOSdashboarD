@@ -5,11 +5,11 @@ import { usePathname } from 'next/navigation';
 import {
   BarChart3,
   CalendarDays,
-  FileText,
   Film,
   Home,
   Lightbulb,
   Plug,
+  Sparkles,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,7 +21,7 @@ const clientViews: { href: string | null; label: string; icon: typeof Home }[] =
   { href: '/resumen', label: 'Resumen', icon: Home },
   { href: '/control', label: 'Control', icon: BarChart3 },
   { href: '/videos', label: 'Videos', icon: Film },
-  { href: '/reportes', label: 'Reportes', icon: FileText },
+  { href: '/agente', label: 'Agente OS', icon: Sparkles },
 ];
 
 const adminViews: { href: string | null; label: string; icon: typeof Home }[] = [

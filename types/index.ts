@@ -114,6 +114,122 @@ export interface Report {
   created_at: string;
 }
 
+// ── Agente OS — arnés del agente de IA (planes/2026-08-29-agente-os-fase1-arnes.md) ──
+
+// Clasificación de tamaño de muestra, calculada SIEMPRE en código
+// (lib/agent/confidence.ts), nunca inferida por el modelo.
+export type ConfidenceTier = 'insuficiente' | 'debil' | 'razonable';
+
+// Forma estándar que devuelve toda tool de datos del agente.
+export interface ToolResult<T = number> {
+  value: T;
+  n: number;
+  period: string; // "YYYY-MM-DD/YYYY-MM-DD"
+  confidence_tier: ConfidenceTier;
+  source: 'zernio';
+}
+
+// Salida estructurada obligatoria del agente antes de redactar texto libre
+// (Capa 2 del contrato de confianza).
+export interface Insight {
+  claim: string;
+  metric: string;
+  n: number;
+  confidence_tier: ConfidenceTier;
+  source: string;
+}
+
+export interface AgentThread {
+  id: string;
+  account_id: string;
+  title?: string;
+  created_at: string;
+}
+
+export interface AgentMessage {
+  id: string;
+  thread_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+export interface AuditLogEntry {
+  conversation_id: string;
+  tool_called: string;
+  params: Record<string, unknown>;
+  n_returned: number | null;
+  confidence_tier: ConfidenceTier | null;
+  claim_final: string | null;
+  created_at: string;
+}
+
+export interface SuccessDefinition {
+  metric: string;
+  // false = todavía no lo configuró el usuario; el agente usa el default y
+  // lo declara explícitamente (ver Decisión #4 del plan de Fase 1).
+  configured: boolean;
+}
+
+// ── Fase 2 — competencia, voz de marca y memoria ──────────────
+// (planes/2026-08-29-agente-os-fase2-competencia-voz-calendario.md)
+
+export interface Competitor {
+  id: string;
+  account_id: string;
+  username: string; // sin @
+  label: string;
+  notes: string;
+  created_at: string;
+}
+
+// Una observación puntual de un competidor. NUNCA es un dato medido: o se
+// raspó de un perfil público, o lo escribió el usuario a mano. Por eso
+// `method` viaja siempre con el dato y el agente no puede presentarlo como
+// equivalente a las métricas propias de Zernio.
+export interface CompetitorSnapshot {
+  id: string;
+  account_id: string;
+  competitor_id: string;
+  observed_at: string;
+  method: 'scrape' | 'manual';
+  followers: number | null;
+  posts_count: number | null;
+  // Medias observadas en las publicaciones públicas visibles, cuando el
+  // proveedor las expone. `sample_size` es cuántas publicaciones se pudieron
+  // ver — es el `n` de esta observación.
+  avg_likes: number | null;
+  avg_comments: number | null;
+  sample_size: number;
+}
+
+// Perfil de voz DERIVADO EN CÓDIGO de las piezas con mejor rendimiento real
+// (Decisión #5 del plan de Fase 2): son hechos medibles sobre el copy, no una
+// descripción que el modelo se invente sobre sí mismo.
+export interface VoiceProfile {
+  n: number; // publicaciones analizadas
+  confidence_tier: ConfidenceTier;
+  based_on: string; // qué criterio seleccionó las piezas
+  avg_hook_words: number | null;
+  avg_caption_chars: number | null;
+  hooks_with_question_pct: number | null;
+  hooks_with_number_pct: number | null;
+  avg_emojis_per_caption: number | null;
+  dominant_formats: { media_type: MediaType; count: number }[];
+  sample_hooks: string[];
+}
+
+// Una cosa estable que el usuario dijo sobre su marca. Guarda de dónde salió
+// para que se pueda auditar y borrar (Decisión #6): memoria sin procedencia es
+// memoria que nadie puede corregir.
+export interface BrandMemoryEntry {
+  id: string;
+  account_id: string;
+  text: string;
+  source_conversation_id: string | null;
+  created_at: string;
+}
+
 // Banco de ideas — ideas de video por etapa del funnel
 export type IdeaStatus = 'pendiente' | 'completada';
 

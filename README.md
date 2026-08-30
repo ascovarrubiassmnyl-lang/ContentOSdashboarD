@@ -20,7 +20,7 @@ con `ZERNIO_API_KEY` en `.env.local` entran las métricas reales de Instagram.
 |---|---|
 | `/resumen` | Vista ejecutiva de la semana (landing) |
 | `/control` | Control de métricas — 12 KPIs, gráficas, retención, heatmap, top posts |
-| `/reportes` | Reportes ejecutivos por periodo con export a Markdown |
+| `/agente` | **Agente OS** — chat con el agente de contenido; los reportes ejecutivos viven en su panel lateral, con export a PDF |
 | `/fuentes` | Banco de fuentes — texto y archivos (PDF, Word, imágenes) que alimentan al generador |
 | `/ideas` | Banco de ideas por etapa del funnel (TOFU/MOFU/BOFU) — Kanban o tabla |
 | `/generador` | Chat de guiones con IA — usa métricas reales + banco de fuentes + los 7 frameworks |
@@ -55,11 +55,62 @@ Limitaciones de esta fuente (la UI las degrada con elegancia): sin curva de rete
 segundo a segundo, sin métricas de historias, sin histórico de seguidores (se construye
 al sincronizar cada día) y sin taps al link / CTR de bio.
 
-## IA (generador y reportes)
+## IA — Agente OS
 
-Con `ANTHROPIC_API_KEY` configurada, Claude escribe los guiones (estructurados con los
-7 Frameworks de Guiones Virales) y los reportes. Sin la llave, un generador demo usa
-plantillas alimentadas con los datos reales.
+Con `OPENROUTER_API_KEY` configurada, el agente de contenido (OpenRouter, tool-calling
+sobre las métricas reales de la cuenta) redacta los reportes quincenales y responde en
+el chat. Sin la llave, `app/api/agent/chat` y la generación de reportes fallan
+explícitamente en vez de inventar datos.
+
+**Contrato de confianza:** toda cifra que el agente reporta viene de una tool que calcula
+en código el tamaño de muestra (`n`) y su nivel de confianza; el modelo no puede
+inventarlos ni omitir el aviso cuando la muestra es pequeña. Cada llamada queda en
+`agent_audit_log`, así que cualquier afirmación del reporte se puede cruzar con el dato
+que la respalda.
+
+Lo que sabe hacer: analizar crecimiento, retención y rendimiento **por formato** (con
+confianza independiente por formato), derivar el perfil de voz de la cuenta desde sus
+piezas con mejor rendimiento, comparar contra competidores, leer el link de un reel
+que le pegues, escribir guiones y organizar el calendario. Los guiones se guardan como
+borrador y el calendario es el interno de la app: **el agente nunca publica en
+Instagram**.
+
+Se habla con él en `/agente`. Mientras trabaja, la interfaz muestra en vivo **qué tool
+está consultando y con qué `n`** — no texto apareciendo letra a letra. Es a propósito:
+la respuesta final viaja dentro de `submit_insights` y el disclaimer de confianza se lo
+añade el código al parsearla, así que emitir prosa según llega significaría enseñarla
+antes de saber si lleva aviso.
+
+## Competencia
+
+Los competidores se registran desde la app (máx. 10 por cuenta) y un cron diario intenta
+refrescar sus datos leyendo el perfil público (`COMPETITOR_PROVIDER=instagram-public`).
+
+⚠️ Ese proveedor gratuito **está confirmado bloqueado**: Instagram responde HTTP 400 a
+su endpoint público desde una IP de servidor. Sirve como intento barato, no como plan.
+
+Hay dos salidas, y las dos ya funcionan:
+
+- **`COMPETITOR_PROVIDER=apify`** con un `APIFY_TOKEN` — verificado contra perfiles
+  reales. Se factura por lectura (~0.003 USD): 10 competidores con el cron diario
+  salen por ~1 USD al mes.
+- **Registro manual** desde la app, que queda marcado como `manual`.
+
+En los tres casos el agente trata el dato como **estimado**, nunca al mismo nivel que
+las métricas propias, e indica cuántos días tiene la observación. Cuando un refresco
+falla no se guarda nada: la última observación buena sobrevive con su fecha.
+
+## Analizar un link de video
+
+Pegar el link de un reel o post de Instagram en el chat hace que el agente lo lea
+(vía Apify) y describa cómo está construido: copy, duración, estructura del hook, y
+cómo se compara con la voz de la cuenta.
+
+Es **una pieza ajena observada desde fuera**: se ven los likes y comentarios públicos,
+no el alcance, ni los guardados, ni si llevaba pauta. Por eso llega siempre con `n: 1`
+y confianza `insuficiente`, y el agente no puede decir que funcionó ni recomendarte
+copiarla por sus números. Solo Instagram: un link de TikTok o YouTube se rechaza
+nombrando el dominio en vez de intentarlo y devolver basura.
 
 ## Paso a producción (pendiente)
 

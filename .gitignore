@@ -12,3 +12,6 @@ data/
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+
+# permisos locales de Claude Code, propios de cada máquina
+.claude/settings.local.json

@@ -15,7 +15,7 @@ export function GET() {
       db: isDbConfigured(),
       zernio: Boolean(process.env.ZERNIO_API_KEY),
       encryption: hasEncryptionKey(),
-      claude: Boolean(process.env.ANTHROPIC_API_KEY),
+      openrouter: Boolean(process.env.OPENROUTER_API_KEY),
       cron: Boolean(process.env.CRON_SECRET),
       auth: isAuthEnabled(),
     },

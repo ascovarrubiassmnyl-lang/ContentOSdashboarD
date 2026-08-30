@@ -1,7 +1,7 @@
-import { MediaPost, MetricSnapshot, Report } from '@/types';
+import { MetricSnapshot, Report } from '@/types';
 import { uid } from './db';
 import { Workspace, readFor, writeFor } from './accounts';
-import { askClaude, hasClaudeKey } from './claude';
+import { generateAgentReport } from './agent/report';
 import { seedIfNeeded } from './mock';
 
 function inRange(date: string, start: string, end: string) {
@@ -12,8 +12,6 @@ function sum(rows: MetricSnapshot[], key: keyof MetricSnapshot) {
   return rows.reduce((a, r) => a + (r[key] as number), 0);
 }
 
-const reportSystem = (who: string) => `Eres el analista de contenido de ${who}. Escribes reportes ejecutivos en español, en Markdown, con esta estructura: ## Resumen ejecutivo (3 líneas), ## Qué funcionó, ## Qué cayó, ## Recomendaciones concretas (accionables mañana, no teoría). Usas los números reales que te paso, sin inventar datos.`;
-
 export async function generateReport(
   ws: Workspace,
   periodStart: string,
@@ -23,11 +21,9 @@ export async function generateReport(
   const snapshots = (await readFor<MetricSnapshot>(ws, 'metric_snapshots')).filter((s) =>
     inRange(s.snapshot_date, periodStart, periodEnd)
   );
-  const posts = (await readFor<MediaPost>(ws, 'media_posts')).filter((p) =>
-    inRange(p.published_at.slice(0, 10), periodStart, periodEnd)
-  );
 
-  // Periodo anterior de igual longitud, para la comparativa
+  // Periodo anterior de igual longitud, para la comparativa que guarda el
+  // campo `data` del Report (lo consume components/agente/ReportsPanel.tsx).
   const days = Math.max(
     1,
     Math.round(
@@ -75,121 +71,14 @@ export async function generateReport(
     link_taps: { current: cur.taps, previous: prev.taps, delta: pct(cur.taps, prev.taps) },
   };
 
-  const topPosts = [...posts]
-    .sort(
-      (a, b) =>
-        b.likes + b.comments + b.saves + b.shares -
-        (a.likes + a.comments + a.saves + a.shares)
-    )
-    .slice(0, 3);
-
-  let summary: string;
-  if (hasClaudeKey()) {
-    const dataBlock = `PERIODO: ${periodStart} → ${periodEnd} (vs ${prevStart} → ${prevEnd})\n\nCOMPARATIVA:\n${JSON.stringify(
-      comparison,
-      null,
-      2
-    )}\n\nTOP POSTS DEL PERIODO:\n${topPosts
-      .map(
-        (p) =>
-          `- [${p.media_type}] "${p.hook}" → ${
-            p.likes + p.comments + p.saves + p.shares
-          } interacciones`
-      )
-      .join('\n')}`;
-    summary = await askClaude(reportSystem(ws.username ? `${ws.label} (@${ws.username})` : ws.label), dataBlock, 2500);
-  } else if (cur.reach === 0 && cur.views === 0 && cur.interactions === 0 && topPosts.length === 0) {
-    // Periodo sin un solo dato. Antes se generaba igualmente el informe
-    // completo, con ceros y frases afirmativas ("los guardados confirman
-    // que…"): un documento que parecía un análisis y no lo era.
-    summary = `## Resumen ejecutivo
-
-**No hay datos para el periodo ${periodStart} – ${periodEnd}.** No se registraron publicaciones ni métricas en esa ventana, así que no hay nada que analizar.
-
-## Posibles causas
-
-- La cuenta no publicó nada en esas fechas.
-- Todavía no se ha sincronizado con Instagram: ve a **Conexión IG** y pulsa *Sincronizar ahora*.
-- El periodo es anterior a los datos disponibles (Zernio entrega los últimos 90 días).
-
----
-*Reporte sin datos — deliberadamente no se ha estimado ni redondeado ninguna cifra.*`;
-  } else {
-    const arrow = (d: number | null) =>
-      d === null ? '—' : d >= 0 ? `▲ +${d}%` : `▼ ${d}%`;
-    const interactionsLine =
-      comparison.interactions.delta === null
-        ? `Las interacciones sumaron **${cur.interactions.toLocaleString('es-CO')}** (sin periodo anterior con el que comparar).`
-        : `Las interacciones ${
-            comparison.interactions.delta >= 0 ? 'crecieron' : 'cayeron'
-          } ${arrow(comparison.interactions.delta)}.`;
-
-    summary = `## Resumen ejecutivo
-
-Entre **${periodStart}** y **${periodEnd}** la cuenta alcanzó **${cur.reach.toLocaleString(
-      'es-CO'
-    )} cuentas** (${arrow(comparison.reach.delta)} vs periodo anterior) con **${cur.views.toLocaleString(
-      'es-CO'
-    )} vistas** y un neto de **${cur.gained - cur.lost} seguidores nuevos**. ${interactionsLine}
-
-## Qué funcionó
-
-${
-  topPosts.length > 0
-    ? topPosts
-        .map(
-          (p, i) =>
-            `${i + 1}. **"${p.hook}"** (${p.media_type.toLowerCase()}) — ${
-              p.likes + p.comments + p.saves + p.shares
-            } interacciones, ${p.reach.toLocaleString('es-CO')} de alcance.`
-        )
-        .join('\n')
-    : '- No hubo publicaciones en este periodo, así que el alcance viene de contenido anterior.'
-}
-
-${
-  cur.saves > 0
-    ? `Los guardados del periodo (${cur.saves.toLocaleString('es-CO')}, ${arrow(
-        comparison.saves.delta
-      )}) confirman que el contenido de valor accionable sigue siendo el motor de la cuenta.`
-    : 'Sin guardados registrados en el periodo: es la señal que más conviene levantar en las próximas piezas.'
-}
-
-## Qué cayó
-
-${
-  (comparison.link_taps.delta ?? 0) < 0
-    ? `- Los taps al link cayeron ${arrow(
-        comparison.link_taps.delta
-      )} — revisar el CTA de bio y las historias con link.`
-    : '- Sin caídas relevantes en los indicadores principales del periodo.'
-}
-${
-  (comparison.views.delta ?? 0) < 0
-    ? `- Las vistas retrocedieron ${arrow(comparison.views.delta)} — el volumen de publicación bajó o los hooks perdieron tensión.`
-    : ''
-}
-
-## Recomendaciones concretas
-
-1. ${
-  topPosts[0]
-    ? `**Duplicar el patrón del top 1**: "${topPosts[0].hook}" — grabar 2 variaciones del mismo ángulo esta semana.`
-    : '**Volver a publicar**: no hubo piezas en el periodo, así que no hay patrón ganador que duplicar.'
-}
-2. **Programar en los horarios pico** detectados en el heatmap del dashboard (revisar sección Control).
-3. **Convertir guardados en seguidores**: añadir CTA de seguimiento en los 3 posts con más guardados del periodo.
-
----
-*Generado en modo demo — configura ANTHROPIC_API_KEY para reportes redactados por Claude.*`;
-  }
+  const { summary_md } = await generateAgentReport(ws, periodStart, periodEnd);
 
   const report: Report = {
     id: uid(),
     account_id: ws.id,
     period_start: periodStart,
     period_end: periodEnd,
-    summary_md: summary,
+    summary_md,
     data: comparison as unknown as Record<string, unknown>,
     created_at: new Date().toISOString(),
   };
