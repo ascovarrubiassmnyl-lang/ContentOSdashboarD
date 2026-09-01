@@ -6,6 +6,7 @@ import { AlertTriangle, Bell, CalendarDays, CheckCircle2, Gauge, Plug } from 'lu
 import { useState } from 'react';
 import { Button, Card, Spinner, Tabs } from '@/components/ui';
 import NotificationsPanel from '@/components/NotificationsPanel';
+import NotificationsBell from '@/components/NotificationsBell';
 import {
   FollowersChart,
   FormatBar,
@@ -83,9 +84,7 @@ export default function ControlPage() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="secondary" className="h-10 w-10 p-0 rounded-full flex items-center justify-center text-muted hover:text-foreground" onClick={() => setIsNotifOpen(true)}>
-            <Bell size={18} />
-          </Button>
+          <NotificationsBell onClick={() => setIsNotifOpen(true)} />
         </div>
       </div>
 

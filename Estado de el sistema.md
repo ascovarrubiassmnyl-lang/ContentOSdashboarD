@@ -241,12 +241,11 @@ Las mismas funciones (`readCollection`, `writeCollection`, `readSingleton`, `wri
 | **Sin histórico de seguidores nativo** | Se construye acumulativamente snapshot por snapshot al sincronizar cada día |
 | **Sin taps al link / CTR de bio** | Zernio no entrega estos datos — los KPIs se muestran con "No disponible en esta fuente" |
 | **Guardados y watch time en Páginas de Facebook** | Meta no siempre expone estos campos para Páginas — pueden salir en cero sin que sea un error |
-| **Sin scheduling real de publicaciones** | El calendario es solo planificación — no publica automáticamente |
+| **Sin scheduling real de publicaciones** | El calendario es solo planificación — no publica automáticamente (el agente sí puede llenarlo en bloque desde una estructura declarada, ver Fase 4) |
 | **Sin roles / permisos dentro de un mismo Workspace** | Multiusuario real (Google o contraseña), pero no hay colaboradores compartiendo un mismo workspace |
 | **Sin recuperación de contraseña por correo** | No hay proveedor de email configurado — documentado en `/cuenta` y `DEPLOY.md` |
 | **Sin comentarios / DMs** | No hay gestión de inbox ni respuestas |
 | **Sin análisis de competidores** | Solo analiza las propias cuentas |
-| **Sin notificaciones / alertas** | No avisa de caídas de métricas, cambios bruscos, etc. |
 | **Sin A/B testing** | No hay comparación de variaciones de contenido |
 | **Sin histórico de cambios** | No hay versionado de guiones ni auditoría de acciones |
 

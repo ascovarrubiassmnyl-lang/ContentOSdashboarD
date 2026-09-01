@@ -102,6 +102,10 @@ export interface CalendarItem {
   scheduled_at: string;
   status: CalendarStatus;
   notes: string;
+  // Fase 4 — opcionales a propósito: las piezas creadas antes de la
+  // planificación en bloque no los traen y no hay migración que hacer.
+  plan_id?: string | null; // de qué plan aprobado salió esta pieza (permite deshacer)
+  pillar?: string | null; // pilar de contenido declarado en la estrategia
 }
 
 export interface Report {
@@ -228,6 +232,95 @@ export interface BrandMemoryEntry {
   text: string;
   source_conversation_id: string | null;
   created_at: string;
+}
+
+// ── Fase 4 — estructura de calendario declarada y planificación en bloque ──
+// (planes/2026-09-01-agente-os-fase4-estrategia-calendario.md)
+
+// Una franja de publicación preferida: "martes a las 18:00", en la zona
+// horaria de la estrategia. `weekday` sigue la convención de Date: 0 = domingo.
+export interface StrategySlot {
+  weekday: number; // 0-6
+  time: string; // "HH:MM" local
+}
+
+export interface ContentPillar {
+  name: string;
+  description: string;
+}
+
+export interface CopyRules {
+  tone: string;
+  cta_style: string;
+  caption_length: 'corta' | 'media' | 'larga';
+  avoid: string[];
+}
+
+// Lo que el usuario DECLARA que quiere hacer. No es evidencia de rendimiento:
+// `get_format_performance` mide lo que pasó, esto describe lo que se pretende.
+// El agente tiene prohibido usarlo como respaldo de una afirmación de
+// resultados (Decisión #1 del plan de Fase 4).
+export interface ContentStrategy {
+  // false = el usuario no la configuró y se está usando el default declarado,
+  // mismo patrón que SuccessDefinition.
+  configured: boolean;
+  timezone: string; // IANA, ej. "America/Mexico_City"
+  weekly_targets: { format: CalendarFormat; per_week: number }[];
+  funnel_mix: { tofu: number; mofu: number; bofu: number }; // porcentajes, suman 100
+  slots: StrategySlot[];
+  pillars: ContentPillar[];
+  copy_rules: CopyRules;
+  notes: string;
+  updated_at: string | null;
+}
+
+export interface CalendarPlanItem {
+  title: string;
+  format: CalendarFormat;
+  nivel: FunnelLevel | null;
+  pillar: string | null;
+  scheduled_at: string; // ISO UTC, resuelto en código desde fecha + franja
+  notes: string;
+  script_id: string | null;
+}
+
+// Un desvío no es un error: publicar 5 reels la semana de un lanzamiento
+// cuando la cadencia dice 3 es una decisión legítima. Se reporta y decide el
+// usuario (Decisión #4 del plan de Fase 4).
+export interface PlanDeviation {
+  kind: 'cadencia' | 'funnel' | 'pilar';
+  detail: string;
+}
+
+export type CalendarPlanStatus = 'propuesto' | 'aplicado' | 'descartado';
+
+export interface CalendarPlan {
+  id: string;
+  account_id: string;
+  status: CalendarPlanStatus;
+  range: { start: string; end: string };
+  rationale: string;
+  items: CalendarPlanItem[];
+  deviations: PlanDeviation[];
+  created_at: string;
+  applied_at: string | null;
+}
+
+// Cobertura: lo programado frente a lo declarado, por semana natural.
+export interface CalendarCoverage {
+  timezone: string;
+  configured: boolean;
+  weeks: {
+    week_start: string; // lunes, YYYY-MM-DD
+    by_format: {
+      format: CalendarFormat;
+      scheduled: number;
+      target: number;
+      gap: number; // target - scheduled (negativo = por encima del objetivo)
+    }[];
+    funnel: { tofu: number; mofu: number; bofu: number; sin_nivel: number };
+    total_scheduled: number;
+  }[];
 }
 
 // Banco de ideas — ideas de video por etapa del funnel

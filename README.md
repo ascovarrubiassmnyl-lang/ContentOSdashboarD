@@ -24,7 +24,8 @@ con `ZERNIO_API_KEY` en `.env.local` entran las métricas reales de Instagram.
 | `/fuentes` | Banco de fuentes — texto y archivos (PDF, Word, imágenes) que alimentan al generador |
 | `/ideas` | Banco de ideas por etapa del funnel (TOFU/MOFU/BOFU) — Kanban o tabla |
 | `/generador` | Chat de guiones con IA — usa métricas reales + banco de fuentes + los 7 frameworks |
-| `/calendario` | Calendario editorial — niveles de funnel, duplicar/pegar, auto-limpieza a las 24 h |
+| `/calendario` | Calendario editorial — niveles de funnel, duplicar/pegar, auto-limpieza a las 24 h, cobertura vs. lo declarado |
+| `/estrategia` | **Estructura de calendario declarada** — cadencia, mezcla de funnel, franjas, pilares y reglas de copy, más métrica de éxito, notificaciones y memoria de marca |
 | `/conexion` | Cuentas conectadas (multicuenta), estado de la conexión y sync manual |
 
 ## Multicuenta
@@ -80,6 +81,50 @@ está consultando y con qué `n`** — no texto apareciendo letra a letra. Es a 
 la respuesta final viaja dentro de `submit_insights` y el disclaimer de confianza se lo
 añade el código al parsearla, así que emitir prosa según llega significaría enseñarla
 antes de saber si lleva aviso.
+
+## Estructura de calendario y planificación en bloque
+
+En `/estrategia` se declara **cómo quieres operar**: cuántas piezas por semana y de qué
+formato, la mezcla TOFU/MOFU/BOFU, los días y horas habituales (con zona horaria), tus
+pilares de contenido y tus reglas de copy. El agente lo lee como criterio en cada
+conversación.
+
+Es un dato **declarado**, y el código lo mantiene separado de lo medido: el agente puede
+usarlo para planificar, pero tiene prohibido citarlo como prueba de que algo funciona —
+para eso están las métricas, con su `n` y su nivel de confianza. Si no has declarado
+nada, el agente lo dice y propone partir de uno de los **arquetipos de calendario**
+incluidos (educativo B2B, marca personal, e-commerce, servicios locales, autoridad de
+bajo volumen, semana de lanzamiento), avisando de que son heurísticas y no mediciones de
+tu cuenta.
+
+Pidiéndole que organice una quincena, el agente arma el plan completo y lo deja
+**pendiente de tu aprobación**: aparece una tarjeta con las piezas día por día y los
+desvíos respecto a tu cadencia declarada (salirse no es un error — una semana de
+lanzamiento lo hace a propósito). Un clic en «Aplicar al calendario» crea las piezas de
+golpe, y «Deshacer» borra exactamente esas, sin tocar el resto. El agente propone; quien
+ejecuta es el botón.
+
+`/calendario` muestra la cobertura de la semana: programado frente a declarado, con el
+mismo cálculo que consume el agente.
+
+## Notificaciones
+
+Con las claves VAPID configuradas (`npx web-push generate-vapid-keys`), ContentOS envía
+notificaciones push reales: recordatorios antes de que toque publicar una pieza, avisos
+cuando el agente termina un reporte, y alertas si una cuenta deja de sincronizar. Se
+activan desde la campana, en el panel de notificaciones.
+
+Detalles que conviene saber:
+
+- **Suenan con el tono de notificación del dispositivo**, como cualquier otra app. La
+  Notification API no permite enviar un tono propio en segundo plano, así que no se
+  promete.
+- **En iOS hace falta instalar la PWA** en la pantalla de inicio (iOS 16.4+); el panel lo
+  explica cuando detecta ese caso.
+- **Sin claves VAPID todo sigue funcionando**: el historial de avisos vive igual dentro
+  de la app y la UI dice qué falta.
+- Cada aviso se deduplica en código, así que el cron de 15 minutos no puede repetir el
+  mismo recordatorio; las horas de silencio se aplican en el servidor.
 
 ## Competencia
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { hasZernioFor, listAccounts } from '@/lib/accounts';
 import { syncFromZernio } from '@/lib/zernio';
 import { purgeExpiredCalendar } from '@/lib/maintenance';
+import { emitNotification } from '@/lib/notifications/emit';
 
 // Cron diario (7:00 a.m.): sincroniza Instagram vía Zernio y purga el
 // calendario — de TODAS las cuentas, una por una. Protegido con CRON_SECRET;
@@ -36,8 +37,20 @@ export async function GET(req: NextRequest) {
       try {
         entry.sync = await syncFromZernio(ws);
       } catch (err) {
-        entry.syncError = (err as Error).message;
+        const message = (err as Error).message;
+        entry.syncError = message;
         failed++;
+        // Una cuenta que deja de sincronizar envejece en silencio: los paneles
+        // siguen enseñando datos viejos con pinta de frescos. La clave de
+        // dedupe lleva el día para avisar una vez al día, no en cada intento.
+        await emitNotification({
+          ws,
+          kind: 'system_alert',
+          title: `No se pudo sincronizar ${ws.label}`,
+          body: message.slice(0, 180),
+          url: '/conexion',
+          dedupeKey: `sync_error:${ws.id}:${new Date().toISOString().slice(0, 10)}`,
+        }).catch(() => undefined);
       }
     } else {
       entry.sync = 'omitido (sin API key de Zernio)';

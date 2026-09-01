@@ -17,6 +17,7 @@ import { AGENT_TOOLS, runTool } from './tools';
 import { logToolCall } from './audit';
 import { getSuccessDefinition } from './success-definition';
 import { brandMemoryPromptBlock } from './brand-memory';
+import { contentStrategyPromptBlock } from './content-strategy';
 import { uid } from '../db';
 
 // El reporte quincenal necesita legítimamente muchas consultas: 4 métricas × 2
@@ -75,6 +76,7 @@ const SUBMIT_INSIGHTS_TOOL: ToolSchema = {
 async function agentSystemPrompt(ws: Workspace): Promise<string> {
   const success = await getSuccessDefinition(ws);
   const memory = await brandMemoryPromptBlock(ws);
+  const strategy = await contentStrategyPromptBlock(ws);
   const who = ws.username ? `${ws.label} (@${ws.username})` : ws.label;
   const successLine = success.configured
     ? `La métrica de éxito configurada para esta cuenta es "${success.metric}".`
@@ -102,12 +104,24 @@ Sobre escribir contenido:
 - Antes de redactar copy, guiones o ideas, consulta get_content_voice_profile para sonar a esta cuenta. Si su confidence_tier es bajo, trátalo como pista y dilo.
 - Si recomiendas un formato sobre otro, primero get_format_performance, y respeta el confidence_tier de CADA formato por separado.
 
+Sobre la estructura del calendario (lo declarado vs. lo medido):
+- Antes de opinar sobre frecuencia, formatos, horarios o pilares, consulta get_content_strategy. Es lo que el usuario DECLARÓ que quiere hacer.
+- Lo declarado NO es evidencia de rendimiento. Nunca digas "esto funciona" citando la estrategia: para afirmar resultados hacen falta get_metrics o get_format_performance, con su n y su confidence_tier.
+- Si la estrategia no está configurada, dilo y ofrece un punto de partida con get_calendar_playbooks, aclarando que es una heurística general y no una medición de esta cuenta. Respeta el campo "not_for" de cada arquetipo.
+- Para saber si falta o sobra contenido, usa get_calendar_coverage. No cuentes las piezas a mano desde list_calendar.
+
+Sobre planificar un periodo:
+- Si el usuario pide organizar una semana, quincena o mes, usa draft_calendar_plan UNA vez con todas las piezas. Nunca encadenes muchos schedule_calendar_item para eso: schedule_calendar_item es para una pieza suelta.
+- draft_calendar_plan NO escribe en el calendario. Deja una propuesta que el usuario aprueba con un botón. Termina siempre diciendo cuántas piezas propusiste, en qué rango, y que están pendientes de su aprobación — nunca digas que ya quedaron agendadas.
+- Si el plan devuelve "deviations", explícaselas en una línea cada una: son decisiones que el usuario debe ver, no errores que tengas que ocultar ni corregir por tu cuenta.
+
 Sobre guardar cosas:
 - save_script_draft y schedule_calendar_item guardan dentro de ContentOS y nada sale publicado a Instagram. Aun así, cada vez que guardes algo dile al usuario exactamente qué guardaste y dónde.
 - update_brand_memory es solo para preferencias estables que el usuario dijo explícitamente y seguirán siendo ciertas en meses. Nunca guardes conclusiones tuyas ni datos de métricas, y avísale siempre de que lo guardaste.
+- No puedes editar la estrategia de calendario: si crees que debería cambiar, recomiéndalo y dile que la ajuste en la pantalla Estrategia.
 - Nunca inventes un id: los de calendario salen de list_calendar, los de guion de save_script_draft.
 
-- Al terminar cada turno, SIEMPRE respondes llamando a la tool "submit_insights" con tu Markdown final y la lista de insights que respaldan cualquier afirmación de rendimiento que hayas hecho. Nunca respondas con texto libre directamente.${memory}`;
+- Al terminar cada turno, SIEMPRE respondes llamando a la tool "submit_insights" con tu Markdown final y la lista de insights que respaldan cualquier afirmación de rendimiento que hayas hecho. Nunca respondas con texto libre directamente.${strategy}${memory}`;
 }
 
 interface LoopResult {

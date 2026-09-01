@@ -62,6 +62,7 @@ export const SCOPED_COLLECTIONS = [
   'sources',
   'ideas',
   'calendar_items',
+  'calendar_plans',
   'scripts',
   'reports',
   'agent_threads',
@@ -71,6 +72,7 @@ export const SCOPED_COLLECTIONS = [
   'competitors',
   'competitor_snapshots',
   'brand_memory',
+  'notifications',
 ] as const;
 
 const PALETTE = ['#7C7CF5', '#F59E5B', '#F55C8A', '#4ED8A0', '#57B6F5', '#C77CF5'];

@@ -23,9 +23,10 @@ import {
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AgentMessage, AgentThread } from '@/types';
+import { AgentMessage, AgentThread, CalendarPlan } from '@/types';
 import { MarkdownView } from './markdown';
 import ReportsPanel from './ReportsPanel';
+import PlanCard from './PlanCard';
 
 // ── Auto-resize del textarea (del rediseño) ──────────────────
 function useAutoResizeTextarea({ minHeight, maxHeight }: { minHeight: number; maxHeight: number }) {
@@ -61,6 +62,10 @@ const TOOL_LABELS: Record<string, string> = {
   get_brand_memory: 'recordando tus preferencias',
   get_success_definition: 'viendo tu métrica de éxito',
   list_calendar: 'leyendo el calendario',
+  get_content_strategy: 'leyendo tu estructura de calendario',
+  get_calendar_playbooks: 'consultando arquetipos de calendario',
+  get_calendar_coverage: 'midiendo la cobertura del calendario',
+  draft_calendar_plan: 'armando el plan',
   analyze_video_url: 'abriendo el link',
   update_brand_memory: 'guardando una preferencia',
   save_script_draft: 'guardando el guion',
@@ -104,8 +109,9 @@ const QUICK_ACTIONS: { icon: typeof Sparkles; label: string; prompt: string }[] 
   },
   {
     icon: CalendarDays,
-    label: 'Plan de la semana',
-    prompt: '¿Qué tengo en el calendario esta semana y qué falta por llenar?',
+    label: 'Planear la quincena',
+    prompt:
+      'Arma mi calendario de las próximas dos semanas siguiendo mi estructura declarada y lo que mejor me está funcionando.',
   },
   {
     icon: Link2,
@@ -124,6 +130,13 @@ export default function Chat() {
   const [error, setError] = useState<string | null>(null);
   const [showReports, setShowReports] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  // Planes que el agente propuso EN ESTA conversación. No se refrescan al
+  // aplicarlos a propósito: la tarjeta tiene que seguir en pantalla con su
+  // botón de deshacer, y una recarga la haría desaparecer justo cuando el
+  // usuario podría querer revertir.
+  const [plans, setPlans] = useState<CalendarPlan[]>([]);
+  const [timezone, setTimezone] = useState('America/Mexico_City');
+  const knownPlanIds = useRef<Set<string>>(new Set());
 
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({ minHeight: 52, maxHeight: 200 });
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -135,7 +148,42 @@ export default function Chat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, trace]);
+  }, [messages, trace, plans]);
+
+  // La zona horaria de la estrategia es la que decide cómo se leen las horas
+  // del plan. Sin esto, un plan de las 18:00 se pintaría en UTC.
+  useEffect(() => {
+    fetch('/api/content-strategy')
+      .then((r) => r.json())
+      .then((d) => d?.strategy?.timezone && setTimezone(d.strategy.timezone))
+      .catch(() => undefined);
+
+    // Los planes que ya estaban propuestos antes de abrir el chat quedan
+    // marcados como conocidos: pertenecen a otra conversación.
+    fetch('/api/calendar/plans?status=propuesto')
+      .then((r) => r.json())
+      .then((d: { plans?: CalendarPlan[] }) => {
+        for (const p of d.plans ?? []) knownPlanIds.current.add(p.id);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  // Tras cada respuesta: buscar propuestas nuevas. Se comparan contra las que
+  // ya existían antes del turno para no resucitar un plan de anteayer que el
+  // usuario dejó sin contestar.
+  async function loadNewPlans() {
+    try {
+      const res = await fetch('/api/calendar/plans?status=propuesto');
+      const data = (await res.json()) as { plans: CalendarPlan[] };
+      const fresh = (data.plans ?? []).filter((p) => !knownPlanIds.current.has(p.id));
+      if (fresh.length > 0) {
+        for (const p of fresh) knownPlanIds.current.add(p.id);
+        setPlans((prev) => [...prev, ...fresh]);
+      }
+    } catch {
+      // Que falle la tarjeta no debe romper la respuesta ya entregada.
+    }
+  }
 
   async function openThread(id: string) {
     setShowHistory(false);
@@ -144,6 +192,7 @@ export default function Chat() {
     setThreadId(id);
     setMessages(data.messages.map((m) => ({ role: m.role, content: m.content })));
     setTrace([]);
+    setPlans([]);
     setError(null);
   }
 
@@ -157,6 +206,7 @@ export default function Chat() {
     setThreadId(null);
     setMessages([]);
     setTrace([]);
+    setPlans([]);
     setError(null);
     setShowHistory(false);
   }
@@ -248,6 +298,7 @@ export default function Chat() {
             setMessages((m) => [...m, { role: 'assistant', content: data.reply_md as string }]);
             setTrace([]);
             qc.invalidateQueries({ queryKey: ['agent-threads'] });
+            void loadNewPlans();
           } else if (event === 'error') {
             setError(data.message as string);
           }
@@ -503,6 +554,23 @@ export default function Chat() {
                   </div>
                 </div>
               )}
+
+              {/* Los planes propuestos van bajo la respuesta: es donde el
+                  usuario confirma en bloque lo que el agente planificó. */}
+              {plans.map((plan) => (
+                <div key={plan.id} className="flex gap-3">
+                  <div className="h-8 w-8 shrink-0 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center">
+                    <CalendarDays size={14} className="text-primary" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <PlanCard
+                      plan={plan}
+                      timezone={timezone}
+                      onChanged={() => qc.invalidateQueries({ queryKey: ['calendar'] })}
+                    />
+                  </div>
+                </div>
+              ))}
 
               {error && (
                 <div className="max-w-3xl mx-auto rounded-xl border border-negative/30 bg-negative/10 px-4 py-3">

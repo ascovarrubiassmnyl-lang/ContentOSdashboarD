@@ -59,6 +59,47 @@ llama al endpoint y termina.
 Si falla, el script sale con código 1 y Railway marca la ejecución como fallida
 en lugar de aparentar que fue bien.
 
+## Servicio 3 — el cron de recordatorios (cada 15 min)
+
+Va aparte del diario a propósito: un aviso de "faltan 2 horas para publicar" con
+granularidad diaria no existe.
+
+1. En el MISMO proyecto: **New → GitHub Repo** → el mismo repo.
+2. **Settings → Config-as-code**: `railway.cron-notify.json`.
+3. **Settings → Cron Schedule**: `*/15 * * * *`.
+4. **Variables**: `APP_URL` y `CRON_SECRET`, igual que el servicio 2.
+5. En los logs debe salir `[cron notifications] OK en …ms — {"ok":true,…}`.
+
+Este servicio solo es útil si el servicio 1 tiene claves VAPID (ver abajo): sin
+ellas los recordatorios se registran en el panel de la app pero no salen al
+teléfono.
+
+## Notificaciones push (VAPID)
+
+1. Genera el par UNA vez, en local:
+
+   ```bash
+   npx web-push generate-vapid-keys
+   ```
+
+2. En el **servicio 1** (la app web), añade:
+   - `VAPID_PUBLIC_KEY` — la pública
+   - `VAPID_PRIVATE_KEY` — la privada
+   - `VAPID_SUBJECT` — `mailto:tucorreo@…` (los push services rechazan otra cosa)
+
+3. Vuelve a desplegar y activa las notificaciones desde la campana de la app.
+
+Notas de plataforma que conviene tener presentes antes de prometer nada:
+
+- El sonido y la vibración los pone el **sistema operativo**, con el tono de
+  notificación del dispositivo. No se puede enviar un tono propio en segundo
+  plano: el campo `sound` quedó fuera del estándar.
+- En **iOS 16.4+** el push exige que la PWA esté **instalada en la pantalla de
+  inicio**, y que el permiso se pida desde un gesto del usuario. La app detecta
+  ese caso y muestra las instrucciones.
+- Si cambias el par VAPID, todas las suscripciones existentes dejan de valer y
+  cada dispositivo tiene que volver a activarse.
+
 ## Dominio propio
 
 **Settings → Networking → Custom Domain** en el servicio web, y añade el CNAME

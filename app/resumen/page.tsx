@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, DeltaBadge, Spinner } from '@/components/ui';
 import NotificationsPanel from '@/components/NotificationsPanel';
+import NotificationsBell from '@/components/NotificationsBell';
 import {
   CalendarItem,
   ConnectionResponse,
@@ -152,9 +153,7 @@ export default function ResumenPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" className="h-10 w-10 p-0 rounded-full flex items-center justify-center text-muted hover:text-foreground" onClick={() => setIsNotifOpen(true)}>
-            <Bell size={18} />
-          </Button>
+          <NotificationsBell onClick={() => setIsNotifOpen(true)} />
         </div>
       </div>
 

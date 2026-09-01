@@ -12,6 +12,16 @@ Dentro de ContentOS hay un **agente de IA** ("Jarvis de contenido, marca persona
 
 ## 2. Alcance del agente en v1 (decisión ya tomada — no expandir sin discutirlo)
 
+> **Nota (2026-09-01):** esta sección se escribió antes de la Fase 2 y quedó parcialmente
+> superada, con acuerdo explícito del usuario. El agente **sí escribe dentro de
+> ContentOS**: guiones en borrador, memoria de marca y piezas del calendario interno
+> (Fase 2), y desde la Fase 4 puede proponer un calendario completo que el usuario
+> aprueba con un botón. Lo que sigue intacto es lo que de verdad importaba de esta
+> decisión: **nada sale de ContentOS**. No publica en Instagram, no programa
+> publicaciones reales, no gasta presupuesto y no toca el MCP de Meta. Por eso sigue sin
+> hacer falta la capa de permisos que se descarta abajo: no hay acción irreversible ni
+> visible hacia fuera, y toda escritura queda en `agent_audit_log`.
+
 El agente **NO ejecuta acciones de escritura**. No publica, no programa posts, no gasta presupuesto, no toca el MCP oficial de Meta para gestión de campañas. Esto está deliberadamente fuera de alcance para v1.
 
 El agente sí hace:

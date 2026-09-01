@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listAccounts, readFor } from '@/lib/accounts';
 import { generateReport } from '@/lib/reports';
+import { emitNotification } from '@/lib/notifications/emit';
 import { Report } from '@/types';
 
 const FIFTEEN_DAYS_MS = 15 * 86400_000;
@@ -48,6 +49,17 @@ export async function GET(req: NextRequest) {
         const periodStart = new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10);
         const report = await generateReport(ws, periodStart, periodEnd);
         entry.report = { id: report.id, period_start: report.period_start, period_end: report.period_end };
+        // Trabajo NO interactivo: el usuario no estaba mirando, así que un
+        // aviso aquí sí aporta (a diferencia de lo que pide en el chat, que ya
+        // está viendo llegar).
+        await emitNotification({
+          ws,
+          kind: 'agent_activity',
+          title: 'Tu reporte quincenal está listo',
+          body: `Periodo ${periodStart} a ${periodEnd} de ${ws.label}.`,
+          url: '/agente?panel=reportes',
+          dedupeKey: `report:${report.id}`,
+        });
       }
     } catch (err) {
       entry.reportError = (err as Error).message;

@@ -88,6 +88,7 @@ export async function scheduleCalendarItem(
     nivel?: FunnelLevel;
     notes?: string;
     script_id?: string;
+    pillar?: string;
   }
 ): Promise<{ saved: true; item_id: string; title: string; scheduled_at: string }> {
   const item: CalendarItem = {
@@ -102,6 +103,9 @@ export async function scheduleCalendarItem(
     // pasa a producción.
     status: 'idea',
     notes: args.notes ?? '',
+    // Pieza suelta: no viene de ningún plan aprobado en bloque.
+    plan_id: null,
+    pillar: args.pillar ?? null,
   };
 
   const items = await readFor<CalendarItem>(ws, 'calendar_items');

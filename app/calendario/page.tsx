@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Input, Modal, Select, Tabs, Textarea } from '@/components/ui';
 import { CalendarFormat, CalendarItem, CalendarStatus, FunnelLevel } from '@/types';
 import { cn } from '@/lib/utils';
+import CoverageStrip from '@/components/estrategia/CoverageStrip';
 
 const FORMAT_COLOR: Record<CalendarFormat, string> = {
   reel: 'bg-primary/20 text-primary border-primary/40',
@@ -245,6 +246,8 @@ export default function CalendarioPage() {
           Crear pieza
         </Button>
       </div>
+
+      <CoverageStrip date={cursor} />
 
       {/* Controles */}
       <div className="flex flex-wrap items-center gap-3 mb-5">

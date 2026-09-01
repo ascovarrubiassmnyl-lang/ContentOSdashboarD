@@ -19,6 +19,9 @@ import {
   saveScriptDraft,
   scheduleCalendarItem,
 } from './write-tools';
+import { getContentStrategy, weeklyTotal } from './content-strategy';
+import { getPlaybooks } from './calendar-playbooks';
+import { draftCalendarPlan, getCalendarCoverage, MAX_PLAN_ITEMS } from './calendar-plan';
 
 function inRange(date: string, start: string, end: string) {
   return date >= start && date <= end;
@@ -303,6 +306,21 @@ export async function analyzeVideoUrl(
   };
 }
 
+// ── get_content_strategy ─────────────────────────────────────
+// Lo DECLARADO por el usuario. Devuelve `kind: 'declarado'` y jamás un
+// confidence_tier: no es una medición, es una intención. El prompt prohíbe
+// usarla como respaldo de una afirmación de rendimiento (Decisión #1, Fase 4).
+export async function getContentStrategyTool(ws: Workspace) {
+  const strategy = await getContentStrategy(ws);
+  return {
+    kind: 'declarado' as const,
+    caveat:
+      'Esto es lo que el usuario DECLARÓ que quiere hacer, no evidencia de que funcione. Nunca lo cites como respaldo de una afirmación de rendimiento: para eso están get_metrics y get_format_performance.',
+    strategy,
+    weekly_total: weeklyTotal(strategy),
+  };
+}
+
 // ── Schema (formato OpenAI, tool-calling) ────────────────────
 export const AGENT_TOOLS: ToolSchema[] = [
   {
@@ -562,6 +580,109 @@ export const AGENT_TOOLS: ToolSchema[] = [
   {
     type: 'function',
     function: {
+      name: 'get_content_strategy',
+      description:
+        'Devuelve la ESTRUCTURA DE CALENDARIO que el usuario declaró: cuántas piezas por semana y de qué formato, mezcla objetivo de funnel, franjas horarias preferidas con su zona horaria, pilares de contenido y reglas de copy. Consúltala SIEMPRE antes de opinar sobre frecuencia, formatos, horarios o antes de armar un plan. ATENCIÓN: es un dato DECLARADO (lo que el usuario quiere hacer), no medido — nunca lo uses como prueba de que algo funciona. Si `configured` es false, el usuario no la ha definido: dilo y ofrécele partir de un arquetipo de get_calendar_playbooks.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_calendar_playbooks',
+      description:
+        'Devuelve arquetipos de estructura de calendario (educativo B2B, marca personal, e-commerce, servicios locales, autoridad de bajo volumen, semana de lanzamiento) con su cadencia, mezcla de funnel, franjas y pilares típicos, más una guía de qué mide cada etapa del funnel. Úsala cuando el usuario no tenga estrategia configurada o pida ayuda para diseñar una desde cero. Son HEURÍSTICAS declaradas por ContentOS, no rendimiento medido: dilo cuando recomiendes una, y fíjate en `not_for` antes de proponer un arquetipo.',
+      parameters: {
+        type: 'object',
+        properties: {
+          archetype_id: {
+            type: 'string',
+            description: 'Opcional: un arquetipo concreto. Sin esto, devuelve todos.',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_calendar_coverage',
+      description:
+        'Compara, semana natural por semana natural, lo que YA está programado en el calendario contra la cadencia declarada en la estrategia. Devuelve por formato: programado, objetivo y hueco (`gap` positivo = faltan piezas). Úsala antes de decir que falta o sobra contenido — no cuentes las piezas tú mismo a partir de list_calendar.',
+      parameters: {
+        type: 'object',
+        properties: {
+          range: {
+            type: 'object',
+            properties: {
+              start: { type: 'string', description: 'YYYY-MM-DD' },
+              end: { type: 'string', description: 'YYYY-MM-DD' },
+            },
+            required: ['start', 'end'],
+          },
+        },
+        required: ['range'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'draft_calendar_plan',
+      description:
+        'PROPONE un calendario completo para un periodo (varias piezas de golpe) y lo deja pendiente de que el usuario lo apruebe. NO escribe nada en el calendario: las piezas solo se crean cuando el usuario pulsa "Aplicar al calendario" en la tarjeta que aparece bajo tu respuesta. Úsala SIEMPRE que el usuario pida planificar una semana, quincena o mes — nunca llames a schedule_calendar_item muchas veces seguidas para eso. Antes: consulta get_content_strategy (cadencia y franjas), get_calendar_coverage (qué ya hay) y get_content_voice_profile (cómo suena la cuenta). La hora se toma de las franjas declaradas si no mandas `time`. Devuelve `deviations` cuando el plan se sale de la cadencia declarada: eso NO es un error, es información para el usuario. Al terminar, dile cuántas piezas propusiste y que están pendientes de su aprobación.',
+      parameters: {
+        type: 'object',
+        properties: {
+          range: {
+            type: 'object',
+            properties: {
+              start: { type: 'string', description: 'YYYY-MM-DD' },
+              end: { type: 'string', description: 'YYYY-MM-DD' },
+            },
+            required: ['start', 'end'],
+          },
+          rationale: {
+            type: 'string',
+            description:
+              'Por qué este plan: en qué te apoyaste (estrategia declarada, rendimiento por formato, huecos de cobertura). Sin afirmar resultados futuros.',
+          },
+          items: {
+            type: 'array',
+            description: `Las piezas del plan (máximo ${MAX_PLAN_ITEMS}).`,
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                format: { type: 'string', enum: ['reel', 'carrusel', 'historia', 'ad'] },
+                date: { type: 'string', description: 'YYYY-MM-DD en la zona horaria del usuario' },
+                time: {
+                  type: 'string',
+                  description:
+                    'HH:MM en 24 h, hora local. Si lo omites se usa una franja declarada de ese día.',
+                },
+                nivel: { type: 'string', enum: ['tofu', 'mofu', 'bofu'] },
+                pillar: {
+                  type: 'string',
+                  description: 'Pilar de contenido, tal como se llama en la estrategia del usuario.',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Ángulo, hook propuesto o instrucción de producción.',
+                },
+                script_id: { type: 'string', description: 'Id de save_script_draft, si aplica.' },
+              },
+              required: ['title', 'format', 'date'],
+            },
+          },
+        },
+        required: ['range', 'rationale', 'items'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_success_definition',
       description:
         'Devuelve la métrica de éxito configurada por el usuario para esta cuenta (guardados, alcance, ventas, etc.). Si `configured` es false, el usuario no la configuró todavía y estás usando un default — debes declararlo explícitamente en tu respuesta cuando des cualquier insight de rendimiento, en vez de asumir en silencio que el usuario está de acuerdo con el default.',
@@ -650,6 +771,37 @@ const moveCalendarItemSchema = z.object({
 
 const listCalendarSchema = z.object({ range: rangeSchema });
 
+const getPlaybooksSchema = z.object({ archetype_id: z.string().optional() });
+
+const coverageSchema = z.object({ range: rangeSchema });
+
+// El plan entero se valida aquí antes de tocar nada. Las reglas "duras"
+// (fecha fuera de rango, en el pasado, dos piezas en la misma franja) viven en
+// draftCalendarPlan porque necesitan la estrategia y el calendario existente;
+// aquí solo se comprueba la forma.
+const draftCalendarPlanSchema = z.object({
+  range: rangeSchema,
+  rationale: z.string().min(1),
+  items: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(160),
+        format: z.enum(['reel', 'carrusel', 'historia', 'ad']),
+        date: dateSchema,
+        time: z
+          .string()
+          .regex(/^\d{2}:\d{2}$/, 'debe ser una hora HH:MM en 24 h')
+          .optional(),
+        nivel: z.enum(['tofu', 'mofu', 'bofu']).optional(),
+        pillar: z.string().max(80).optional(),
+        notes: z.string().max(1000).optional(),
+        script_id: z.string().optional(),
+      })
+    )
+    .min(1)
+    .max(MAX_PLAN_ITEMS),
+});
+
 function parseArgs<T>(schema: z.ZodType<T>, name: string, args: unknown): T {
   const parsed = schema.safeParse(args);
   if (!parsed.success) {
@@ -691,6 +843,12 @@ export async function runTool(
       return getSuccessDefinitionTool(ws);
     case 'list_calendar':
       return listCalendar(ws, parseArgs(listCalendarSchema, name, args));
+    case 'get_content_strategy':
+      return getContentStrategyTool(ws);
+    case 'get_calendar_playbooks':
+      return getPlaybooks(parseArgs(getPlaybooksSchema, name, args).archetype_id);
+    case 'get_calendar_coverage':
+      return getCalendarCoverage(ws, parseArgs(coverageSchema, name, args).range);
 
     // ── Escritura (solo dentro de ContentOS, nada sale a Instagram) ──
     case 'update_brand_memory': {
@@ -704,6 +862,10 @@ export async function runTool(
       return scheduleCalendarItem(ws, parseArgs(scheduleCalendarItemSchema, name, args));
     case 'move_calendar_item':
       return moveCalendarItem(ws, parseArgs(moveCalendarItemSchema, name, args));
+    // Propone un plan completo. Escribe en `calendar_plans`, NUNCA en el
+    // calendario: aplicarlo es un clic del usuario, no una decisión del modelo.
+    case 'draft_calendar_plan':
+      return draftCalendarPlan(ws, parseArgs(draftCalendarPlanSchema, name, args));
 
     default:
       throw new Error(`Tool desconocida: ${name}`);

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   BarChart3,
   CalendarDays,
+  Compass,
   Film,
   Home,
   Lightbulb,
@@ -27,6 +28,7 @@ const clientViews: { href: string | null; label: string; icon: typeof Home }[] =
 const adminViews: { href: string | null; label: string; icon: typeof Home }[] = [
   { href: '/ideas', label: 'Banco de ideas', icon: Lightbulb },
   { href: '/calendario', label: 'Calendario', icon: CalendarDays },
+  { href: '/estrategia', label: 'Estrategia', icon: Compass },
   { href: '/conexion', label: 'Integraciones', icon: Plug },
 ];
 
