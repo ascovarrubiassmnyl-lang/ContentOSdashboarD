@@ -74,6 +74,19 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
 
   await writeFor(ws, 'calendar_items', items);
+
+  // Acercar la fecha de una pieza en espera la mete en la ventana de subida:
+  // se empuja ya, en vez de dejarla esperando al siguiente pase.
+  if (
+    changed &&
+    after.publish?.auto &&
+    !after.publish.zernio_post_id &&
+    after.publish.state !== 'publicado' &&
+    isWithinPushWindow(after)
+  ) {
+    const pushed = await advanceItem(ws, id);
+    if (pushed) return NextResponse.json({ item: pushed });
+  }
   return NextResponse.json({ item: items[idx] });
 }
 

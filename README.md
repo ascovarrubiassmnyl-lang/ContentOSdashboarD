@@ -206,7 +206,14 @@ Cómo funciona por dentro:
    `scheduledFor`. A partir de ahí la publicación la hace Zernio.
 3. **Cada 15 minutos** el mismo cron de los recordatorios llama a `/api/cron/publish`, que
    empuja lo que entra en la ventana, refresca en `GET /v1/posts/{id}` el estado de lo ya
-   programado y borra los binarios que ya no usa ninguna pieza.
+   programado y borra los binarios que ya no usa ninguna pieza. Con la app abierta, el
+   navegador dispara el mismo pase cada 5 minutos (`/api/publish/tick`), así que lo
+   pendiente avanza aunque el servicio de cron no esté desplegado.
+
+Una vez creada en Zernio, la publicación **no depende de ContentOS**: la hace Zernio a su
+hora aunque el servidor esté apagado. El cron solo hace falta para empujar lo que aún no
+se ha subido (piezas a más de 6 días) y para reflejar el resultado en el calendario — por
+eso conviene desplegar el servicio de cron de 15 minutos (ver `DEPLOY.md`).
 
 Estados de una pieza: `en espera` (aún lejos de su fecha) → `programada en Zernio` →
 `publicada`. Si algo falla, queda en error con el mensaje de Zernio a la vista y se

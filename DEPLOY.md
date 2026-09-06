@@ -59,20 +59,31 @@ llama al endpoint y termina.
 Si falla, el script sale con código 1 y Railway marca la ejecución como fallida
 en lugar de aparentar que fue bien.
 
-## Servicio 3 — el cron de recordatorios (cada 15 min)
+## Servicio 3 — el cron de 15 minutos (recordatorios + publicación)
 
-Va aparte del diario a propósito: un aviso de "faltan 2 horas para publicar" con
-granularidad diaria no existe.
+**Este es el que hace falta para que la publicación automática funcione con la
+app cerrada.** Va aparte del diario a propósito: ni un aviso de "faltan 2 horas
+para publicar" ni una pieza programada a las 10:15 existen con granularidad
+diaria.
 
 1. En el MISMO proyecto: **New → GitHub Repo** → el mismo repo.
 2. **Settings → Config-as-code**: `railway.cron-notify.json`.
 3. **Settings → Cron Schedule**: `*/15 * * * *`.
 4. **Variables**: `APP_URL` y `CRON_SECRET`, igual que el servicio 2.
-5. En los logs debe salir `[cron notifications] OK en …ms — {"ok":true,…}`.
+5. En los logs debe salir `[cron notifications] OK en …ms` y
+   `[cron publish] OK en …ms — {"ok":true,…}`.
 
-Este servicio solo es útil si el servicio 1 tiene claves VAPID (ver abajo): sin
-ellas los recordatorios se registran en el panel de la app pero no salen al
-teléfono.
+Qué pasa si NO se despliega este servicio:
+
+| Con el servicio | Sin el servicio |
+|---|---|
+| Todo automático, con la app cerrada | Las piezas a **6 días o menos** salen igual: el post ya está creado en Zernio y lo publica Zernio, no ContentOS |
+| Las piezas a más de 6 días se empujan solas al entrar en la ventana | Se quedan **en espera** hasta que alguien abra ContentOS (el navegador dispara el mismo pase cada 5 min) |
+| El estado y el enlace se ponen al día solos | Se ponen al día al abrir la app |
+| Los binarios huérfanos se purgan | No se purgan: el almacén crece |
+
+Los recordatorios push, además, solo salen al teléfono si el servicio 1 tiene
+claves VAPID (ver abajo); sin ellas se registran en el panel de la app.
 
 ## Notificaciones push (VAPID)
 

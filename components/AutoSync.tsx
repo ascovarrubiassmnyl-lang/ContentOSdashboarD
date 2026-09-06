@@ -1,11 +1,16 @@
 'use client';
 
-// Refresco automático de las cuentas conectadas.
+// Refresco automático de las cuentas conectadas y de la publicación programada.
 //
 // Va montado en el shell de la app, así que corre en todas las pantallas: el
 // usuario no tiene que ir a Conexión ni pulsar nada para que los números se
 // actualicen. Aquí solo se decide CUÁNDO preguntar; qué cuentas tocan de
 // verdad lo decide el servidor (lib/auto-sync.ts), que aplica el intervalo.
+//
+// Además del sync, dispara el pase de publicación: empuja a Zernio las piezas
+// que entran en la ventana de subida y pone al día el estado de las ya
+// programadas. Es la red de seguridad del cron — con la app abierta, lo
+// pendiente avanza aunque el servicio de cron no esté desplegado.
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -37,10 +42,16 @@ export interface AutoSyncReport {
   at: string;
 }
 
+interface PublishTick {
+  changed: number;
+  at: string;
+}
+
 export default function AutoSync() {
   const qc = useQueryClient();
   const router = useRouter();
   const lastApplied = useRef<string | null>(null);
+  const lastPublish = useRef<string | null>(null);
 
   const { data } = useQuery<AutoSyncReport>({
     queryKey: ['auto-sync'],
@@ -58,6 +69,30 @@ export default function AutoSync() {
     // en POLL_MS vuelve a intentarlo solo.
     retry: false,
   });
+
+  const { data: tick } = useQuery<PublishTick>({
+    queryKey: ['publish-tick'],
+    queryFn: async () => {
+      const res = await fetch('/api/publish/tick', { method: 'POST' });
+      if (!res.ok) throw new Error('pase de publicación no disponible');
+      return res.json();
+    },
+    refetchInterval: POLL_MS,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    staleTime: POLL_MS,
+    retry: false,
+  });
+
+  // Si alguna pieza se empujó o se publicó, el calendario ya no es el que se ve.
+  useEffect(() => {
+    if (!tick || tick.changed === 0) return;
+    if (lastPublish.current === tick.at) return;
+    lastPublish.current = tick.at;
+    qc.invalidateQueries({ queryKey: ['calendar'] });
+    qc.invalidateQueries({ queryKey: ['notifications'] });
+    router.refresh();
+  }, [tick, qc, router]);
 
   // Si algo se refrescó de verdad, hay que rehacer lo que se ve en pantalla.
   useEffect(() => {
