@@ -17,12 +17,30 @@ import {
   startOfWeek,
 } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Copy, Plus, Search, Trash2, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Plus,
+  Rocket,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Input, Modal, Select, Tabs, Textarea } from '@/components/ui';
-import { CalendarFormat, CalendarItem, CalendarStatus, FunnelLevel } from '@/types';
+import {
+  CalendarFormat,
+  CalendarItem,
+  CalendarStatus,
+  FunnelLevel,
+  PublishState,
+} from '@/types';
 import { cn } from '@/lib/utils';
 import CoverageStrip from '@/components/estrategia/CoverageStrip';
+import PublishBlock from '@/components/calendario/PublishBlock';
 
 const FORMAT_COLOR: Record<CalendarFormat, string> = {
   reel: 'bg-primary/20 text-primary border-primary/40',
@@ -65,6 +83,28 @@ const STATUS_LABEL: Record<CalendarStatus, string> = {
   publicado: '🚀 Publicado',
 };
 
+// Marca en la cuadrícula: de un vistazo, qué piezas salen solas y cuáles ya
+// salieron. Sin esto, una pieza programada y una simple idea se ven igual.
+const PUBLISH_HINT: Record<PublishState, string> = {
+  off: 'sin publicación automática',
+  pendiente: 'en espera de subirse a Zernio',
+  programado: 'programada en Zernio',
+  publicado: 'publicada',
+  error: 'falló la publicación',
+};
+
+function PublishDot({ item }: { item: CalendarItem }) {
+  const state = item.publish?.auto ? item.publish.state : null;
+  if (!state || state === 'off') return null;
+  if (state === 'publicado') {
+    return <CheckCircle2 size={9} className="inline mr-1 -mt-0.5 shrink-0" />;
+  }
+  if (state === 'error') {
+    return <AlertTriangle size={9} className="inline mr-1 -mt-0.5 shrink-0" />;
+  }
+  return <Rocket size={9} className="inline mr-1 -mt-0.5 shrink-0" />;
+}
+
 interface FormState {
   id: string | null;
   title: string;
@@ -74,6 +114,7 @@ interface FormState {
   time: string;
   status: CalendarStatus;
   notes: string;
+  caption: string;
 }
 
 const emptyForm = (date?: Date): FormState => ({
@@ -85,6 +126,7 @@ const emptyForm = (date?: Date): FormState => ({
   time: '10:00',
   status: 'idea',
   notes: '',
+  caption: '',
 });
 
 export default function CalendarioPage() {
@@ -95,11 +137,24 @@ export default function CalendarioPage() {
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm());
+  // Publicación automática: el archivo se queda en espera hasta que la pieza
+  // existe (para subirlo hace falta su id), y el interruptor se aplica al
+  // guardar, en la misma acción que el resto del formulario.
+  const [file, setFile] = useState<File | null>(null);
+  const [auto, setAuto] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const { data } = useQuery<{ items: CalendarItem[] }>({
     queryKey: ['calendar'],
     queryFn: async () => (await fetch('/api/calendar')).json(),
   });
+
+  // La pieza abierta, tal y como está guardada. Lo que el servidor sabe de su
+  // archivo y de su publicación no vive en el formulario.
+  const current = useMemo(
+    () => (form.id ? (data?.items ?? []).find((i) => i.id === form.id) ?? null : null),
+    [data, form.id]
+  );
 
   const upsert = useMutation({
     mutationFn: async () => {
@@ -111,6 +166,7 @@ export default function CalendarioPage() {
         scheduled_at,
         status: form.status,
         notes: form.notes,
+        caption: form.caption,
         script_id: null,
       };
       const res = form.id
@@ -125,11 +181,40 @@ export default function CalendarioPage() {
             body: JSON.stringify(payload),
           });
       if (!res.ok) throw new Error('Error guardando la pieza');
+      const saved: CalendarItem = (await res.json()).item;
+
+      // Orden obligatorio: primero existe la pieza, luego se le cuelga el
+      // archivo, y solo entonces se puede pedir que se publique — sin archivo
+      // el servidor rechaza la publicación automática.
+      if (file) {
+        const up = await fetch(
+          `/api/calendar/${saved.id}/media?filename=${encodeURIComponent(file.name)}`,
+          { method: 'POST', headers: { 'content-type': file.type }, body: file }
+        );
+        if (!up.ok) {
+          const body = await up.json().catch(() => ({}));
+          throw new Error(body.error ?? 'No se pudo subir el archivo.');
+        }
+      }
+
+      const wasAuto = current?.publish?.auto ?? false;
+      if (auto !== wasAuto) {
+        const res2 = await fetch(`/api/calendar/${saved.id}/publish`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: auto ? 'auto' : 'off' }),
+        });
+        if (!res2.ok) {
+          const body = await res2.json().catch(() => ({}));
+          throw new Error(body.error ?? 'No se pudo activar la publicación automática.');
+        }
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['calendar'] });
       setModalOpen(false);
     },
+    onError: (e: Error) => setSaveError(e.message),
   });
 
   const remove = useMutation({
@@ -216,6 +301,9 @@ export default function CalendarioPage() {
 
   const openNew = (day?: Date) => {
     setForm(emptyForm(day));
+    setFile(null);
+    setAuto(false);
+    setSaveError(null);
     setModalOpen(true);
   };
 
@@ -230,7 +318,11 @@ export default function CalendarioPage() {
       time: fmt(d, 'HH:mm'),
       status: item.status,
       notes: item.notes,
+      caption: item.caption ?? '',
     });
+    setFile(null);
+    setAuto(item.publish?.auto ?? false);
+    setSaveError(null);
     setModalOpen(true);
   };
 
@@ -363,13 +455,16 @@ export default function CalendarioPage() {
                       )}
                       title={`${item.title} · ${STATUS_LABEL[item.status]}${
                         item.nivel ? ` · ${NIVEL_META[item.nivel].label}` : ''
-                      } · ${item.format}`}
+                      } · ${item.format}${
+                        item.publish?.auto ? ` · ${PUBLISH_HINT[item.publish.state]}` : ''
+                      }`}
                     >
                       {item.nivel && (
                         <span className="mr-1 text-[8px] font-extrabold tracking-wider opacity-80">
                           {NIVEL_META[item.nivel].label}
                         </span>
                       )}
+                      <PublishDot item={item} />
                       {fmt(parseISO(item.scheduled_at), 'HH:mm')} · {item.title}
                     </button>
                   ))}
@@ -396,6 +491,11 @@ export default function CalendarioPage() {
           Piezas sin nivel usan el color de su formato
         </span>
       </div>
+      <p className="text-[11px] text-muted/60 mt-2 flex items-center gap-1.5">
+        <Rocket size={11} />
+        Las piezas con <Rocket size={9} className="inline -mt-0.5" /> salen publicadas solas
+        a su hora; con <CheckCircle2 size={9} className="inline -mt-0.5" /> ya salieron.
+      </p>
       <p className="text-[11px] text-muted/60 mt-2 flex items-center gap-1.5">
         <Trash2 size={11} />
         Las piezas se eliminan solas 24 h después de su fecha programada.
@@ -489,6 +589,31 @@ export default function CalendarioPage() {
           rows={3}
           placeholder="Guion vinculado, referencias, pendientes…"
         />
+
+        <PublishBlock
+          item={current}
+          format={form.format}
+          file={file}
+          onFile={(f) => {
+            setFile(f);
+            setSaveError(null);
+          }}
+          caption={form.caption}
+          onCaption={(v) => setForm({ ...form, caption: v })}
+          auto={auto}
+          onAuto={(v) => {
+            setAuto(v);
+            setSaveError(null);
+          }}
+        />
+
+        {saveError && (
+          <p className="mb-3 text-xs text-pink flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+            {saveError}
+          </p>
+        )}
+
         <div className="flex justify-between gap-2">
           {form.id ? (
             <div className="flex gap-2">
@@ -518,7 +643,13 @@ export default function CalendarioPage() {
               onClick={() => upsert.mutate()}
               disabled={upsert.isPending || form.title.length < 2}
             >
-              {upsert.isPending ? 'Guardando…' : form.id ? 'Guardar cambios' : 'Crear pieza'}
+              {upsert.isPending
+                ? file
+                  ? 'Subiendo archivo…'
+                  : 'Guardando…'
+                : form.id
+                  ? 'Guardar cambios'
+                  : 'Crear pieza'}
             </Button>
           </div>
         </div>

@@ -106,6 +106,39 @@ export interface CalendarItem {
   // planificación en bloque no los traen y no hay migración que hacer.
   plan_id?: string | null; // de qué plan aprobado salió esta pieza (permite deshacer)
   pillar?: string | null; // pilar de contenido declarado en la estrategia
+  // Publicación automática — también opcionales: una pieza sin archivo ni
+  // `publish` es exactamente el calendario de siempre, solo planificación.
+  caption?: string; // el texto que se publica (las notas son internas)
+  media?: CalendarMedia | null;
+  publish?: CalendarPublish | null;
+}
+
+// El archivo subido a ContentOS para esta pieza. `key` apunta al almacén de
+// binarios (lib/media/store.ts); el binario NO viaja dentro de la pieza.
+export interface CalendarMedia {
+  key: string;
+  filename: string;
+  mime: string;
+  size: number;
+  kind: 'video' | 'image';
+  uploaded_at: string;
+}
+
+export type PublishState =
+  | 'off' // solo planificación (comportamiento de siempre)
+  | 'pendiente' // automática activada, aún fuera de la ventana de subida
+  | 'programado' // ya creada en Zernio con su hora
+  | 'publicado' // Zernio confirma que salió
+  | 'error'; // el último intento falló; el cron reintenta
+
+export interface CalendarPublish {
+  auto: boolean; // el usuario pidió que salga sola
+  state: PublishState;
+  zernio_post_id: string | null;
+  permalink: string | null;
+  error: string | null;
+  pushed_at: string | null; // cuándo se creó el post en Zernio
+  published_at: string | null;
 }
 
 export interface Report {

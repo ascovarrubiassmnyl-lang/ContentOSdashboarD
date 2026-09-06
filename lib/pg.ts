@@ -26,9 +26,15 @@ export function pool(): Pool {
   return _pool;
 }
 
-// La tabla se crea sola la primera vez. Evita tener que acordarse de correr
-// una migración a mano en cada entorno nuevo — es una sola tabla y el
-// CREATE es idempotente.
+// Las tablas se crean solas la primera vez. Evita tener que acordarse de correr
+// una migración a mano en cada entorno nuevo — son dos tablas y los
+// CREATE son idempotentes.
+//
+// `app_media` guarda los binarios (video o imagen) de las piezas del
+// calendario. Va aparte de `app_store` a propósito: `app_store` es jsonb y se
+// lee entera en cada consulta, así que meter ahí un video de 80 MB en base64
+// haría lentísima cualquier lectura del calendario. Aquí el binario solo se
+// toca cuando se pide por su clave.
 let ready: Promise<void> | null = null;
 
 export function ensureSchema(): Promise<void> {
@@ -39,6 +45,14 @@ export function ensureSchema(): Promise<void> {
            key        text PRIMARY KEY,
            value      jsonb NOT NULL,
            updated_at timestamptz NOT NULL DEFAULT now()
+         );
+         CREATE TABLE IF NOT EXISTS app_media (
+           key        text PRIMARY KEY,
+           filename   text NOT NULL,
+           mime       text NOT NULL,
+           size       bigint NOT NULL,
+           bytes      bytea NOT NULL,
+           created_at timestamptz NOT NULL DEFAULT now()
          )`
       )
       .then(() => undefined)

@@ -188,6 +188,38 @@ saltan el intervalo, no la vía normal.
 (métricas, ideas, calendario, guiones, reportes) y su API key cifrada. Se puede
 desconectar también la última: el panel de integraciones puede quedar vacío.
 
+## Publicación automática
+
+Una pieza del calendario puede publicarse sola. En el modal de la pieza se sube el video
+(o la imagen), se escribe el texto que sale publicado y se activa **Publicar sola a esta
+hora**. A esa hora la publicación aparece en Instagram o en la Página de Facebook sin que
+nadie abra la app; cuando sale, la pieza pasa a `publicado` y guarda el enlace real.
+
+Cómo funciona por dentro:
+
+1. **El archivo se guarda en ContentOS**, no en Zernio: en `data/media/` en local, en la
+   tabla `app_media` con Postgres. Es a propósito — los archivos subidos a Zernio caducan a
+   los 7 días si el post todavía no se publicó, y un calendario se planifica con más
+   antelación que eso.
+2. **Cerca de la hora** (`PUBLISH_LEAD_DAYS`, 6 días por defecto) el archivo se sube a
+   Zernio con `POST /v1/media/presign` y se crea el post con `POST /v1/posts` y su
+   `scheduledFor`. A partir de ahí la publicación la hace Zernio.
+3. **Cada 15 minutos** el mismo cron de los recordatorios llama a `/api/cron/publish`, que
+   empuja lo que entra en la ventana, refresca en `GET /v1/posts/{id}` el estado de lo ya
+   programado y borra los binarios que ya no usa ninguna pieza.
+
+Estados de una pieza: `en espera` (aún lejos de su fecha) → `programada en Zernio` →
+`publicada`. Si algo falla, queda en error con el mensaje de Zernio a la vista y se
+reintenta en el siguiente pase.
+
+Editar la hora, el texto o el archivo de una pieza ya programada **cancela el post en
+Zernio y lo vuelve a crear** con lo nuevo. Borrar la pieza también lo cancela y borra el
+archivo: una pieza que ya no está en el calendario no debe salir publicada.
+
+Límites conocidos: los carruseles de varias imágenes y los anuncios no se publican desde
+aquí (`ad` está excluido a propósito), un reel necesita un video, e Instagram no acepta
+publicaciones sin imagen ni video.
+
 ## Seguridad
 
 - Llaves de API solo en `.env.local` / variables de entorno del servidor — jamás en el cliente.

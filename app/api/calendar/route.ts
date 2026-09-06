@@ -4,7 +4,7 @@ import { uid } from '@/lib/db';
 import { readFor, writeFor } from '@/lib/accounts';
 import { requireWorkspace } from '@/lib/session';
 import { seedIfNeeded } from '@/lib/mock';
-import { filterExpired } from '@/lib/maintenance';
+import { filterExpired, releaseItems } from '@/lib/maintenance';
 import { CalendarItem } from '@/types';
 
 const itemSchema = z.object({
@@ -15,6 +15,9 @@ const itemSchema = z.object({
   status: z.enum(['idea', 'en_produccion', 'listo', 'publicado']).default('idea'),
   notes: z.string().default(''),
   script_id: z.string().nullable().default(null),
+  // El texto que se publica. Distinto de `notes`, que son apuntes internos y
+  // nunca salen a Instagram.
+  caption: z.string().max(2200).default(''),
 });
 
 // Limpieza automática (piezas con más de 24 h vencidas) en cada lectura.
@@ -24,8 +27,11 @@ export async function GET() {
   const ws = r.ws;
   await seedIfNeeded(ws);
   const all = await readFor<CalendarItem>(ws, 'calendar_items');
-  const { kept, removed } = filterExpired(all);
-  if (removed > 0) await writeFor(ws, 'calendar_items', kept);
+  const { kept, dropped, removed } = filterExpired(all);
+  if (removed > 0) {
+    await writeFor(ws, 'calendar_items', kept);
+    await releaseItems(ws, dropped);
+  }
   const items = [...kept].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
   return NextResponse.json({ items, purged: removed });
 }

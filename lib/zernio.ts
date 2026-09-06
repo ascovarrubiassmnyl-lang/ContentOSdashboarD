@@ -31,24 +31,43 @@ export function hasZernioKey(): boolean {
   return Boolean(process.env.ZERNIO_API_KEY);
 }
 
-async function zernioGet<T>(
+// Petición cruda a Zernio, con el manejo de errores en un solo sitio.
+// Exportada porque publicar (lib/publish.ts) usa POST y DELETE y tiene que
+// heredar exactamente las mismas traducciones de error: si la key está
+// caducada, el mensaje debe ser el mismo se esté leyendo o publicando.
+export async function zernioRequest<T>(
   apiKey: string,
-  path: string,
-  params: Record<string, string> = {}
+  opts: {
+    method?: string;
+    path: string;
+    params?: Record<string, string>;
+    body?: unknown;
+    headers?: Record<string, string>;
+  }
 ): Promise<T> {
+  const { method = 'GET', path, params = {}, body, headers = {} } = opts;
   const url = `${BASE}${path}${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`;
   const res = await fetch(url, {
+    method,
     headers: {
       authorization: `Bearer ${apiKey}`,
       accept: 'application/json',
+      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+      ...headers,
     },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
   let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`Zernio: respuesta no-JSON (${res.status}): ${text.slice(0, 200)}`);
+  if (text.trim() === '') {
+    // Un 204/200 sin cuerpo es una respuesta válida (p. ej. borrar un post).
+    json = {};
+  } else {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`Zernio: respuesta no-JSON (${res.status}): ${text.slice(0, 200)}`);
+    }
   }
   if (!res.ok) {
     const msg = (json as { message?: string; error?: string })?.message ??
@@ -73,6 +92,14 @@ async function zernioGet<T>(
     throw new Error(`Zernio API ${res.status}: ${msg}`);
   }
   return json as T;
+}
+
+async function zernioGet<T>(
+  apiKey: string,
+  path: string,
+  params: Record<string, string> = {}
+): Promise<T> {
+  return zernioRequest<T>(apiKey, { path, params });
 }
 
 // ── Shapes de Zernio (según docs; verificadas en vivo con el probe) ─────
