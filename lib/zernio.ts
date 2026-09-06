@@ -15,6 +15,7 @@ import {
   Platform,
   Workspace,
   accountPlatform,
+  autoLabel,
   getZernioKey,
   updateAccount,
   writeFor,
@@ -374,6 +375,17 @@ export async function syncFromZernio(ws: Workspace): Promise<{
   };
   await writeSingletonFor(ws, 'account', account);
 
+  // Si la etiqueta del menú es la que generó ContentOS con el nombre anterior,
+  // se refresca; si el usuario la personalizó, no se toca. Antes no se
+  // actualizaba NUNCA, así que una cuenta que cambiaba de nombre en Instagram
+  // —o que se reconectaba en Zernio apuntando a otro perfil— seguía mostrando
+  // el nombre viejo en el menú para siempre, aunque el sync fuera correcto.
+  const labelIsAuto =
+    !ws.label.trim() ||
+    ws.label === 'Cuenta principal' ||
+    ws.label === ws.username ||
+    ws.label === `@${ws.username}`;
+
   // El registro de cuentas guarda lo que necesita el selector del menú.
   await updateAccount(ws.id, {
     username,
@@ -381,6 +393,7 @@ export async function syncFromZernio(ws: Workspace): Promise<{
     last_sync_at: syncedAt,
     zernio_account_id: ig._id,
     avatar_url: option.avatarUrl ?? ws.avatar_url,
+    ...(labelIsAuto ? { label: autoLabel(username, platform) } : {}),
   });
 
   return { account: username, postsSynced: posts.length, followers };

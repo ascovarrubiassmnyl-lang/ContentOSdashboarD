@@ -37,6 +37,10 @@ interface ZernioOption {
   followers: number;
   avatarUrl: string | null;
   alreadyAdded: boolean;
+  // Añadida en ContentOS, pero por otro usuario. No se puede añadir aquí hasta
+  // que su dueño la elimine, así que se marca distinto: gris "ya añadida" a
+  // secas hacía pensar que era tuya y que el fallo era del botón.
+  takenByOther: boolean;
 }
 
 const ANTI_BAN_RULES = [
@@ -667,7 +671,7 @@ function AddAccountModal({
           </p>
           <div className="space-y-2 mb-4">
             {options.map((o) => {
-              const done = o.alreadyAdded || added.includes(o.id);
+              const done = o.alreadyAdded || o.takenByOther || added.includes(o.id);
               return (
               <button
                 key={o.id}
@@ -686,8 +690,15 @@ function AddAccountModal({
                     {fmtInt(o.followers)} seguidores
                     {added.includes(o.id) ? (
                       <span className="text-positive"> · ✓ añadida</span>
+                    ) : o.alreadyAdded ? (
+                      <span className="text-orange">
+                        {' '}
+                        · ya está en tu panel — usa &ldquo;Sincronizar ahora&rdquo;
+                      </span>
                     ) : (
-                      o.alreadyAdded && ' · ya añadida'
+                      o.takenByOther && (
+                        <span className="text-negative"> · añadida por otro usuario</span>
+                      )
                     )}
                   </p>
                 </div>

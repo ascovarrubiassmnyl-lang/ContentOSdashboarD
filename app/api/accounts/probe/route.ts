@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { listAccountsForUser } from '@/lib/accounts';
+import { listAccounts, listAccountsForUser } from '@/lib/accounts';
 import { getSessionUser } from '@/lib/auth';
 import { listConnectedAccounts, toAccountOption } from '@/lib/zernio';
 
@@ -31,10 +31,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existing = new Set((await listAccountsForUser(user.id)).map((w) => w.id));
+  // Hay que mirar DOS conjuntos, no uno. Antes solo se comprobaban las cuentas
+  // del usuario, pero createAccount rechaza el id si existe en CUALQUIER
+  // usuario: una cuenta añadida desde otro login aparecía aquí como disponible
+  // y al pulsarla fallaba siempre con un 409, sin forma de salir del bucle.
+  const mine = new Set((await listAccountsForUser(user.id)).map((w) => w.id));
+  const all = new Set((await listAccounts()).map((w) => w.id));
   const options = raw.map(toAccountOption).map((o) => ({
     ...o,
-    alreadyAdded: existing.has(`acc_${o.id}`),
+    alreadyAdded: mine.has(`acc_${o.id}`),
+    takenByOther: !mine.has(`acc_${o.id}`) && all.has(`acc_${o.id}`),
   }));
 
   if (options.length === 0) {

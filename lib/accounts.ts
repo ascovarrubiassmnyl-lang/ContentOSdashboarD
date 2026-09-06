@@ -49,6 +49,14 @@ export function accountPlatform(ws: Workspace): Platform {
   return ws.platform === 'facebook' ? 'facebook' : 'instagram';
 }
 
+// Etiqueta que ContentOS genera sola a partir del nombre de usuario. La arroba
+// es de Instagram: una Página de Facebook se llama por su nombre. Se usa en dos
+// sitios — al crear la cuenta, y en cada sync para distinguir una etiqueta
+// automática (refrescable) de un nombre que puso el usuario a mano (intocable).
+export function autoLabel(username: string, platform: Platform): string {
+  return platform === 'facebook' ? username : `@${username}`;
+}
+
 const ACCOUNTS_KEY = 'accounts';
 const SECRETS_KEY = 'account_secrets';
 export const ACTIVE_COOKIE = 'co_account';
@@ -191,13 +199,26 @@ export async function createAccount(input: {
   const rows = await listAccounts();
   const id = `acc_${input.zernioAccountId}`;
   const platform: Platform = input.platform === 'facebook' ? 'facebook' : 'instagram';
-  if (rows.some((w) => w.id === id)) {
-    throw new Error(`La cuenta ${input.username} ya está añadida.`);
+  // "Ya la tienes tú" y "la tiene otro usuario" se arreglan de formas muy
+  // distintas, y un mensaje único dejaba al usuario sin saber qué hacer.
+  const clash = rows.find((w) => w.id === id);
+  if (clash) {
+    if (clash.owner_user_id === input.ownerUserId) {
+      throw new Error(
+        `La cuenta ${input.username} ya está en tu panel como "${clash.label}". ` +
+          'No hace falta volver a añadirla: usa "Sincronizar ahora" para traer sus datos actuales, ' +
+          'o elimínala primero si quieres empezar de cero.'
+      );
+    }
+    throw new Error(
+      `La cuenta ${input.username} ya está añadida en ContentOS, pero bajo OTRO usuario ` +
+        `(aparece como "${clash.label}"). Una misma cuenta de Zernio no puede estar en dos ` +
+        'paneles a la vez: el usuario que la tenga debe eliminarla antes de que la añadas aquí.'
+    );
   }
   const ws: Workspace = {
     id,
-    // La arroba es de Instagram: una Página de Facebook se llama por su nombre.
-    label: input.label?.trim() || (platform === 'facebook' ? input.username : `@${input.username}`),
+    label: input.label?.trim() || autoLabel(input.username, platform),
     username: input.username,
     zernio_account_id: input.zernioAccountId,
     color: PALETTE[rows.length % PALETTE.length],
