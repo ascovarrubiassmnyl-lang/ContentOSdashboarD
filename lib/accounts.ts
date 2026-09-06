@@ -59,6 +59,12 @@ export function autoLabel(username: string, platform: Platform): string {
 
 const ACCOUNTS_KEY = 'accounts';
 const SECRETS_KEY = 'account_secrets';
+// Marca de que el arranque legacy YA se hizo alguna vez. Sin ella, un registro
+// de cuentas vacío era indistinguible de una instalación anterior al
+// multicuenta, y bootstrapLegacy() volvía a crear una cuenta fantasma cada vez
+// que el usuario vaciaba el panel: se desconectaba todo y las cuentas
+// reaparecían solas en la siguiente lectura.
+const BOOTSTRAP_KEY = 'accounts_bootstrapped';
 export const ACTIVE_COOKIE = 'co_account';
 
 // Colecciones que pertenecen a una cuenta (se borran con ella).
@@ -114,14 +120,24 @@ export async function writeSingletonFor<T>(
 export async function listAccounts(): Promise<Workspace[]> {
   const rows = await readCollection<Workspace>(ACCOUNTS_KEY);
   if (rows.length > 0) return rows;
+  // Registro vacío: o es una instalación anterior al multicuenta (hay datos que
+  // adoptar) o es un panel que el usuario acaba de vaciar (no hay que
+  // resucitar nada). El marcador distingue los dos casos.
+  if (await readSingleton<{ done: boolean }>(BOOTSTRAP_KEY)) return [];
   const legacy = await bootstrapLegacy();
   return legacy ? [legacy] : [];
 }
 
 // La primera vez que corre el código multicuenta, convierte la instalación
-// existente en la cuenta #1 sin mover un solo dato.
+// existente en la cuenta #1 sin mover un solo dato. Solo la PRIMERA vez: al
+// terminar deja el marcador puesto, pase lo que pase.
 async function bootstrapLegacy(): Promise<Workspace | null> {
   const existing = await readSingleton<IgAccount>('account');
+  await writeSingleton(BOOTSTRAP_KEY, { done: true, at: new Date().toISOString() });
+  // Instalación nueva y limpia: no hay datos previos que adoptar. Crear una
+  // cuenta vacía aquí era lo que llenaba de fantasmas el panel; el usuario
+  // añade la suya desde /conexion.
+  if (!existing) return null;
   const ws: Workspace = {
     id: existing?.id ?? 'acc_principal',
     label: existing?.username ? `@${existing.username}` : 'Cuenta principal',
@@ -234,15 +250,13 @@ export async function createAccount(input: {
   return ws;
 }
 
+// Desconecta una cuenta: la saca del registro y borra TODOS sus datos y su API
+// key. Se puede desconectar también la última que queda — el panel tiene que
+// poder quedar vacío; antes se bloqueaba y por eso "Desconectar" no limpiaba
+// nada cuando solo había una cuenta.
 export async function deleteAccount(id: string, userId: string): Promise<void> {
   const rows = await listAccounts();
-  // La regla es "no te quedes sin ninguna cuenta", así que cuenta las TUYAS.
-  // Contando todas las del sistema, un usuario con una sola cuenta podía
-  // borrarla en cuanto otro usuario tuviera las suyas.
-  if (rows.filter((w) => owns(w, userId)).length <= 1) {
-    throw new Error('No puedes eliminar la única cuenta que queda.');
-  }
-  const ws = rows.find((w) => w.id === id);
+  const ws = rows.find((w) => w.id === id && owns(w, userId));
   if (!ws) throw new Error('Cuenta no encontrada.');
 
   // Todos los datos de esa cuenta.
@@ -253,6 +267,30 @@ export async function deleteAccount(id: string, userId: string): Promise<void> {
   delete secrets[id];
   await writeSingleton(SECRETS_KEY, secrets);
   await saveAccounts(rows.filter((w) => w.id !== id));
+  await forgetActiveCookie(id);
+}
+
+// Desconecta TODAS las cuentas del usuario de una vez: deja el panel de
+// integraciones completamente limpio. Devuelve cuántas se desconectaron.
+export async function deleteAllAccountsForUser(userId: string): Promise<number> {
+  const mine = await listAccountsForUser(userId);
+  for (const ws of mine) {
+    await deleteAccount(ws.id, userId);
+  }
+  return mine.length;
+}
+
+// La cookie de cuenta activa no puede seguir apuntando a una cuenta que ya no
+// existe: activeWorkspace() cae a la primera del usuario, pero dejarla puesta
+// hacía que al añadir una cuenta nueva con el mismo id reapareciera "activa"
+// una selección vieja.
+async function forgetActiveCookie(deletedId: string): Promise<void> {
+  try {
+    const jar = await cookies();
+    if (jar.get(ACTIVE_COOKIE)?.value === deletedId) jar.delete(ACTIVE_COOKIE);
+  } catch {
+    // fuera de contexto de petición (cron) — no hay cookie que limpiar
+  }
 }
 
 // ── Cuenta activa (cookie) ──────────────────────────────────

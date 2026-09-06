@@ -55,8 +55,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   return NextResponse.json({ account: updated });
 }
 
-// Elimina la cuenta Y todos sus datos (métricas, ideas, calendario,
-// guiones y reportes). No se puede borrar la última cuenta que queda.
+// Desconecta la cuenta: la saca del panel y borra todos sus datos (métricas,
+// ideas, calendario, guiones y reportes) y su API key. También la última que
+// queda: el panel de integraciones tiene que poder quedar vacío.
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const user = await getSessionUser();
   if (!user) {

@@ -163,8 +163,30 @@ nombrando el dominio en vez de intentarlo y devolver basura.
    Activar Auth con allowlist del email del dueño. Migrar `data/*.json` y archivos
    de `data/uploads/` a Storage.
 2. **Hosting**: desplegar el proyecto Next.js (Vercel u otro proveedor equivalente)
-   con las variables de entorno, y programar un cron diario a las 7:00 a.m. que haga
-   `POST /api/connection` (sync) — la purga de calendario corre sola en cada lectura.
+   con las variables de entorno, y programar el cron diario de las 7:00 a.m.
+   (`GET /api/cron/sync` con `authorization: Bearer $CRON_SECRET`) — la purga de
+   calendario corre sola en cada lectura.
+
+## Sincronización de las cuentas
+
+No hay que pulsar ningún botón para tener los datos al día. Hay tres disparadores:
+
+- **Al conectar**: al añadir una cuenta (`POST /api/accounts`) se sincroniza en el acto.
+- **Con la app abierta**: `components/AutoSync.tsx` va montado en el shell, así que corre
+  en todas las pantallas. Pregunta al servidor cada 5 minutos y al volver a la pestaña;
+  el servidor (`lib/auto-sync.ts`) decide qué cuentas refrescar de verdad: solo las que
+  llevan más de `AUTO_SYNC_MINUTES` (15 por defecto) sin sincronizar, como mucho 3 por
+  pasada, y con enfriamiento para las que estén fallando. Cuando algo se refresca, se
+  invalidan las vistas que dependen de esos datos.
+- **Cron diario**: `GET /api/cron/sync` repasa todas las cuentas del sistema aunque nadie
+  tenga la app abierta.
+
+Los botones de Conexión (**Sincronizar ahora**, **Actualizar todas**) son atajos que se
+saltan el intervalo, no la vía normal.
+
+**Desconectar es irse.** Desconectar una cuenta la saca del panel y borra sus datos
+(métricas, ideas, calendario, guiones, reportes) y su API key cifrada. Se puede
+desconectar también la última: el panel de integraciones puede quedar vacío.
 
 ## Seguridad
 

@@ -6,6 +6,7 @@ import { ReactNode, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
+import AutoSync from '@/components/AutoSync';
 import type { SessionUser } from '@/lib/auth';
 
 export default function AppShell({
@@ -25,6 +26,10 @@ export default function AppShell({
 
   return (
     <>
+      {/* Mantiene las cuentas al día sin que haya que pulsar "Sincronizar":
+          corre en todas las pantallas de la app, no solo en Conexión. */}
+      {user && <AutoSync />}
+
       {/* ── Barra superior (solo móvil) ── */}
       {/* El botón va a la IZQUIERDA, del mismo lado por el que entra el
           drawer: así el menú se abre desde donde se pulsa. */}

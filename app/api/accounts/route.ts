@@ -7,12 +7,13 @@ import {
   accountPlatform,
   activeWorkspace,
   createAccount,
+  deleteAllAccountsForUser,
   listAccountsForUser,
   zernioKeyState,
 } from '@/lib/accounts';
 import { getSessionUser } from '@/lib/auth';
 import { hasEncryptionKey } from '@/lib/crypto';
-import { syncFromZernio } from '@/lib/zernio';
+import { syncAccount } from '@/lib/auto-sync';
 
 // La API key JAMÁS sale de aquí: solo se informa si existe y de dónde viene.
 export async function GET() {
@@ -117,13 +118,32 @@ export async function POST(req: NextRequest) {
     maxAge: 60 * 60 * 24 * 365,
   });
 
-  let syncError: string | null = null;
-  try {
-    await syncFromZernio(ws);
-  } catch (err) {
-    // La cuenta queda creada aunque el primer sync falle: se puede reintentar.
-    syncError = (err as Error).message;
-  }
+  // Sincronización automática de entrada: en cuanto la cuenta de Zernio queda
+  // conectada, sus métricas entran solas. La cuenta queda creada aunque este
+  // primer sync falle — el refresco automático lo reintenta cada pocos minutos.
+  const result = await syncAccount(ws);
 
-  return NextResponse.json({ account: ws, syncError }, { status: 201 });
+  return NextResponse.json(
+    {
+      account: ws,
+      syncError: result.error ?? null,
+      synced: result.error
+        ? null
+        : { postsSynced: result.postsSynced ?? 0, followers: result.followers ?? 0 },
+    },
+    { status: 201 }
+  );
+}
+
+// Desconectar TODAS las cuentas: las saca del panel y borra sus datos y sus
+// API keys. Es la salida limpia — el panel de integraciones queda vacío, como
+// el de un usuario nuevo.
+export async function DELETE() {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+  const removed = await deleteAllAccountsForUser(user.id);
+  (await cookies()).delete(ACTIVE_COOKIE);
+  return NextResponse.json({ ok: true, removed });
 }

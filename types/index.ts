@@ -349,6 +349,11 @@ export interface ConnectionResponse {
   realConnected: boolean;
   hasData: boolean;
   syncError: string | null;
+  autoSync: {
+    intervalMinutes: number;
+    lastSyncAt: string | null;
+    stale: boolean;
+  };
 }
 
 // ── Payloads agregados que sirven las API routes ────────────

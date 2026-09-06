@@ -47,6 +47,7 @@ export function Button({
   className,
   disabled,
   type = 'button',
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -54,6 +55,9 @@ export function Button({
   className?: string;
   disabled?: boolean;
   type?: 'button' | 'submit';
+  // Los botones de solo icono no dicen qué hacen hasta que se pulsan: el
+  // tooltip nativo es la etiqueta que les falta.
+  title?: string;
 }) {
   const styles = {
     primary:
@@ -67,6 +71,7 @@ export function Button({
       type={type}
       disabled={disabled}
       onClick={onClick}
+      title={title}
       className={cn(
         'px-4 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed',
         styles[variant],

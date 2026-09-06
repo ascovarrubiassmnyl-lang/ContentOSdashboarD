@@ -71,8 +71,8 @@ const FLOW_STEPS = [
   },
   {
     n: 4,
-    title: 'Sincronización',
-    desc: 'Cada sync trae perfil, seguidores y todos los posts con sus métricas reales (alcance, vistas, guardados, watch time de reels).',
+    title: 'Sincronización automática',
+    desc: 'En cuanto la cuenta queda conectada entran sus datos, y a partir de ahí se refrescan solos cada pocos minutos con la app abierta (más una pasada diaria en el servidor): perfil, seguidores y todos los posts con sus métricas reales — alcance, vistas, guardados y watch time de reels. El botón de sincronizar es solo un atajo.',
   },
   {
     n: 5,
@@ -163,14 +163,65 @@ export default function ConexionPage() {
     onSuccess: refreshEverything,
   });
 
+  // Desconectar = irse del panel. Borra la cuenta activa con sus datos y su
+  // API key, así que la lista de arriba queda limpia de verdad.
   const disconnect = useMutation({
-    mutationFn: async () => fetch('/api/connection', { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['connection'] }),
+    mutationFn: async () => {
+      const res = await fetch('/api/connection', { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo desconectar');
+    },
+    onSuccess: refreshEverything,
+  });
+
+  const disconnectAll = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/accounts', { method: 'DELETE' });
+      if (!res.ok) {
+        throw new Error((await res.json()).error ?? 'No se pudieron desconectar');
+      }
+    },
+    onSuccess: refreshEverything,
   });
 
   const reconnect = useMutation({
     mutationFn: async () => fetch('/api/connection', { method: 'PATCH' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['connection'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['connection'] });
+      qc.invalidateQueries({ queryKey: ['accounts'] });
+      qc.invalidateQueries({ queryKey: ['metrics'] });
+    },
+  });
+
+  // Fuerza el refresco de TODAS las cuentas, saltándose el intervalo del
+  // refresco automático. Es un atajo, no la forma normal de tener datos al día.
+  const syncAll = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/accounts/sync?force=1', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Error sincronizando');
+      return json as {
+        synced: { label: string; postsSynced?: number }[];
+        failed: { label: string; error?: string }[];
+      };
+    },
+    onSuccess: (json) => {
+      setSyncError(json.failed.length ? json.failed.map((f) => f.error).join(' · ') : null);
+      setSyncOk(
+        json.synced.length
+          ? `${json.synced.length} ${
+              json.synced.length === 1 ? 'cuenta actualizada' : 'cuentas actualizadas'
+            }: ${json.synced.map((x) => x.label).join(', ')}.`
+          : 'No había nada nuevo que traer.'
+      );
+      qc.invalidateQueries({ queryKey: ['connection'] });
+      qc.invalidateQueries({ queryKey: ['accounts'] });
+      qc.invalidateQueries({ queryKey: ['metrics'] });
+      router.refresh();
+    },
+    onError: (err) => {
+      setSyncOk(null);
+      setSyncError((err as Error).message);
+    },
   });
 
   const account = data?.account;
@@ -288,12 +339,62 @@ export default function ConexionPage() {
       <div className="grid grid-cols-12 gap-5">
         {/* ── Cuentas conectadas ── */}
         <Card className="col-span-12" glow={false}>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
             <p className="section-label">Cuentas conectadas</p>
-            <span className="text-[11px] text-muted">
-              {accounts.length} {accounts.length === 1 ? 'cuenta' : 'cuentas'}
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] text-muted">
+                {accounts.length} {accounts.length === 1 ? 'cuenta' : 'cuentas'}
+              </span>
+              {accounts.length > 0 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="!px-2.5 !py-1.5 !text-xs"
+                    onClick={() => syncAll.mutate()}
+                    disabled={syncAll.isPending}
+                    title="Trae ya los datos de todas las cuentas, sin esperar al refresco automático"
+                  >
+                    <RefreshCw
+                      size={13}
+                      className={`inline mr-1.5 -mt-0.5 ${
+                        syncAll.isPending ? 'animate-spin' : ''
+                      }`}
+                    />
+                    {syncAll.isPending ? 'Actualizando…' : 'Actualizar todas'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="!px-2.5 !py-1.5 !text-xs hover:!text-negative"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `¿Desconectar las ${accounts.length} cuentas? Salen del panel y se ` +
+                            'borran TODOS sus datos (métricas, ideas, calendario y reportes) ' +
+                            'y sus API keys. No se puede deshacer.'
+                        )
+                      ) {
+                        disconnectAll.mutate();
+                      }
+                    }}
+                    disabled={disconnectAll.isPending}
+                  >
+                    <Unplug size={13} className="inline mr-1.5 -mt-0.5" />
+                    {disconnectAll.isPending ? 'Desconectando…' : 'Desconectar todas'}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
+
+          {/* El refresco automático es el camino normal: decirlo evita que
+              nadie sienta que tiene que pulsar un botón para tener datos. */}
+          {accounts.length > 0 && (
+            <p className="text-[11px] text-muted flex items-center gap-1.5 mb-3.5">
+              <RefreshCw size={12} className="text-positive shrink-0" />
+              Se actualizan solas cada {data?.autoSync?.intervalMinutes ?? 15} minutos
+              mientras tengas la app abierta, y una vez al día en el servidor.
+            </p>
+          )}
 
           {accountsQuery.isLoading ? (
             <div className="flex justify-center py-8">
@@ -350,24 +451,25 @@ export default function ConexionPage() {
                     >
                       <Pencil size={13} />
                     </Button>
-                    {accounts.length > 1 && (
-                      <Button
-                        variant="ghost"
-                        className="!px-2.5 !py-1.5 !text-xs hover:!text-negative"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `¿Eliminar ${a.label}? Se borran TODOS sus datos: métricas, ideas, calendario y reportes. No se puede deshacer.`
-                            )
-                          ) {
-                            remove.mutate(a.id);
-                          }
-                        }}
-                        disabled={remove.isPending}
-                      >
-                        <Trash2 size={13} />
-                      </Button>
-                    )}
+                    {/* También la última: si el usuario quiere el panel
+                        vacío, tiene que poder dejarlo vacío. */}
+                    <Button
+                      variant="ghost"
+                      className="!px-2.5 !py-1.5 !text-xs hover:!text-negative"
+                      title={`Desconectar ${a.label}`}
+                      onClick={() => {
+                        if (
+                          confirm(
+                            `¿Desconectar ${a.label}? Sale del panel y se borran TODOS sus datos: métricas, ideas, calendario y reportes. No se puede deshacer.`
+                          )
+                        ) {
+                          remove.mutate(a.id);
+                        }
+                      }}
+                      disabled={remove.isPending}
+                    >
+                      <Trash2 size={13} />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -375,6 +477,14 @@ export default function ConexionPage() {
           )}
           {remove.isError && (
             <p className="text-xs text-negative mt-3">{(remove.error as Error).message}</p>
+          )}
+          {disconnectAll.isError && (
+            <p className="text-xs text-negative mt-3">
+              {(disconnectAll.error as Error).message}
+            </p>
+          )}
+          {syncAll.isError && (
+            <p className="text-xs text-negative mt-3">{(syncAll.error as Error).message}</p>
           )}
         </Card>
 
@@ -440,6 +550,15 @@ export default function ConexionPage() {
                     {relativeTime(account.last_sync_at)}
                   </span>
                 </div>
+                {data?.autoSync && data.source === 'zernio' && (
+                  <div className="flex items-center gap-2 text-xs text-muted">
+                    <RefreshCw size={13} className="text-positive" />
+                    Refresco automático:{' '}
+                    <span className="text-soft font-semibold">
+                      cada {data.autoSync.intervalMinutes} min
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-xs text-muted">
                   <CheckCircle2 size={13} />
                   Fuente:{' '}
@@ -456,7 +575,11 @@ export default function ConexionPage() {
               <div className="flex gap-2 flex-wrap">
                 {connected ? (
                   <>
-                    <Button onClick={() => sync.mutate()} disabled={sync.isPending}>
+                    <Button
+                      onClick={() => sync.mutate()}
+                      disabled={sync.isPending}
+                      title="No hace falta: los datos entran solos. Es para traerlos ya."
+                    >
                       <RefreshCw
                         size={14}
                         className={`inline mr-1.5 -mt-0.5 ${
@@ -467,11 +590,21 @@ export default function ConexionPage() {
                     </Button>
                     <Button
                       variant="danger"
-                      onClick={() => disconnect.mutate()}
+                      onClick={() => {
+                        if (
+                          confirm(
+                            `¿Desconectar ${data?.workspace?.label ?? 'esta cuenta'}? Sale del ` +
+                              'panel y se borran TODOS sus datos: métricas, ideas, calendario ' +
+                              'y reportes. No se puede deshacer.'
+                          )
+                        ) {
+                          disconnect.mutate();
+                        }
+                      }}
                       disabled={disconnect.isPending}
                     >
                       <Unplug size={14} className="inline mr-1.5 -mt-0.5" />
-                      Desconectar
+                      {disconnect.isPending ? 'Desconectando…' : 'Desconectar'}
                     </Button>
                   </>
                 ) : (
@@ -568,6 +701,9 @@ function AddAccountModal({
   // (Instagram y Páginas de Facebook); cerrar el modal tras la primera obligaba
   // a volver a pegar la key para cada una.
   const [added, setAdded] = useState<string[]>([]);
+  // Resultado del sync automático de cada cuenta recién añadida: confirma que
+  // los datos entraron solos, sin tener que ir a pulsar "Sincronizar".
+  const [syncNotes, setSyncNotes] = useState<Record<string, string>>({});
 
   const reset = () => {
     setApiKey('');
@@ -575,6 +711,7 @@ function AddAccountModal({
     setOptions(null);
     setError(null);
     setAdded([]);
+    setSyncNotes({});
   };
 
   // Cerrar. Si se añadió algo, el panel entero tiene que recargarse.
@@ -620,15 +757,24 @@ function AddAccountModal({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'No se pudo añadir la cuenta');
-      return json as { syncError: string | null };
+      return json as {
+        syncError: string | null;
+        synced: { postsSynced: number; followers: number } | null;
+      };
     },
     // El modal se queda abierto: así se añaden de una vez todas las cuentas de
     // esa key sin volver a pegarla. El nombre personalizado sí se limpia,
     // porque era para la cuenta que se acaba de añadir.
-    onSuccess: (_json, opt) => {
+    onSuccess: (json, opt) => {
       setError(null);
       setLabel('');
       setAdded((prev) => [...prev, opt.id]);
+      setSyncNotes((prev) => ({
+        ...prev,
+        [opt.id]: json.synced
+          ? `✓ añadida y sincronizada · ${json.synced.postsSynced} posts`
+          : `añadida, pero Zernio no dio datos: ${json.syncError ?? 'error desconocido'}`,
+      }));
     },
     onError: (err) => setError((err as Error).message),
   });
@@ -689,7 +835,14 @@ function AddAccountModal({
                     <Users size={11} className="inline mr-1 -mt-0.5" />
                     {fmtInt(o.followers)} seguidores
                     {added.includes(o.id) ? (
-                      <span className="text-positive"> · ✓ añadida</span>
+                      <span
+                        className={
+                          syncNotes[o.id]?.startsWith('✓') ? 'text-positive' : 'text-orange'
+                        }
+                      >
+                        {' '}
+                        · {syncNotes[o.id] ?? '✓ añadida'}
+                      </span>
                     ) : o.alreadyAdded ? (
                       <span className="text-orange">
                         {' '}
@@ -716,7 +869,8 @@ function AddAccountModal({
           {error && <p className="text-xs text-negative mb-3">{error}</p>}
           {create.isPending && (
             <p className="text-xs text-muted mb-3">
-              Añadiendo y trayendo sus métricas… puede tardar unos segundos.
+              Añadiendo y trayendo sus métricas… puede tardar unos segundos. A partir de ahí
+              se actualizan solas.
             </p>
           )}
           <div className="flex justify-end gap-2">
