@@ -375,7 +375,7 @@ export interface ConnectionResponse {
     id: string;
     label: string;
     username: string;
-    platform: 'instagram' | 'facebook';
+    platform: 'instagram' | 'facebook' | 'tiktok';
   };
   source: 'zernio' | 'demo';
   demoMode: boolean;

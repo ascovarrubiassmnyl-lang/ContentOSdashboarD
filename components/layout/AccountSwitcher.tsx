@@ -10,7 +10,7 @@ import { Check, ChevronsUpDown, Plus, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { cn, relativeTime } from '@/lib/utils';
 
-export type Platform = 'instagram' | 'facebook';
+export type Platform = 'instagram' | 'facebook' | 'tiktok';
 
 export interface AccountRow {
   id: string;
@@ -26,16 +26,24 @@ export interface AccountRow {
   active: boolean;
 }
 
-// El nombre visible de una cuenta. La arroba es de Instagram: una Página de
-// Facebook se llama por su nombre, no "@nombre".
+// El nombre visible de una cuenta. La arroba es de Instagram y TikTok: una
+// Página de Facebook se llama por su nombre, no "@nombre".
 export function handle(username: string, platform: Platform): string {
   if (!username) return '';
   return platform === 'facebook' ? username : `@${username.replace(/^@/, '')}`;
 }
 
+// Nombre completo de cada red, para los textos de la interfaz.
+export const PLATFORM_NAME: Record<Platform, string> = {
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  tiktok: 'TikTok',
+};
+
 const PLATFORM_STYLE: Record<Platform, { name: string; className: string }> = {
   instagram: { name: 'IG', className: 'bg-primary/15 text-primary' },
   facebook: { name: 'FB', className: 'bg-[#1877F2]/20 text-[#4a9bff]' },
+  tiktok: { name: 'TT', className: 'bg-[#25F4EE]/15 text-[#25F4EE]' },
 };
 
 export function PlatformBadge({ platform }: { platform: Platform }) {

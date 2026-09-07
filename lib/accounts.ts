@@ -22,8 +22,12 @@ import { IgAccount } from '@/types';
 
 // Redes que ContentOS sabe analizar. Zernio conecta muchas más, pero el resto
 // (anuncios, mensajería…) no encaja en este dashboard.
-export const PLATFORMS = ['instagram', 'facebook'] as const;
+export const PLATFORMS = ['instagram', 'facebook', 'tiktok'] as const;
 export type Platform = (typeof PLATFORMS)[number];
+
+export function isPlatform(v: unknown): v is Platform {
+  return typeof v === 'string' && (PLATFORMS as readonly string[]).includes(v);
+}
 
 export interface Workspace {
   id: string; // 'acc_<idZernio>'
@@ -46,13 +50,14 @@ export interface Workspace {
 }
 
 export function accountPlatform(ws: Workspace): Platform {
-  return ws.platform === 'facebook' ? 'facebook' : 'instagram';
+  return isPlatform(ws.platform) ? ws.platform : 'instagram';
 }
 
 // Etiqueta que ContentOS genera sola a partir del nombre de usuario. La arroba
-// es de Instagram: una Página de Facebook se llama por su nombre. Se usa en dos
-// sitios — al crear la cuenta, y en cada sync para distinguir una etiqueta
-// automática (refrescable) de un nombre que puso el usuario a mano (intocable).
+// es de Instagram y TikTok: una Página de Facebook se llama por su nombre. Se
+// usa en dos sitios — al crear la cuenta, y en cada sync para distinguir una
+// etiqueta automática (refrescable) de un nombre que puso el usuario a mano
+// (intocable).
 export function autoLabel(username: string, platform: Platform): string {
   return platform === 'facebook' ? username : `@${username}`;
 }
@@ -214,7 +219,7 @@ export async function createAccount(input: {
 }): Promise<Workspace> {
   const rows = await listAccounts();
   const id = `acc_${input.zernioAccountId}`;
-  const platform: Platform = input.platform === 'facebook' ? 'facebook' : 'instagram';
+  const platform: Platform = isPlatform(input.platform) ? input.platform : 'instagram';
   // "Ya la tienes tú" y "la tiene otro usuario" se arreglan de formas muy
   // distintas, y un mensaje único dejaba al usuario sin saber qué hacer.
   const clash = rows.find((w) => w.id === id);

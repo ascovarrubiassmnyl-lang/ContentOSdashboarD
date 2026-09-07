@@ -1,6 +1,6 @@
 // Integración con Zernio (https://zernio.com) — fuente de datos reales de
-// Instagram y de Páginas de Facebook, SIN necesidad de app de Meta propia.
-// Zernio trae su propia app aprobada y gestiona la autorización.
+// Instagram, Páginas de Facebook y TikTok, SIN necesidad de app propia en cada
+// red. Zernio trae sus propias apps aprobadas y gestiona la autorización.
 //
 // Auth: Authorization: Bearer <ZERNIO_API_KEY>
 // Endpoints usados:
@@ -89,6 +89,17 @@ export async function zernioRequest<T>(
         `Zernio rechazó la API key (${res.status}). Revisa que sea la correcta y que siga activa.`
       );
     }
+    // TikTok limita cuántas cuentas distintas pueden publicar en 24h a través de
+    // una misma app de desarrollador, y todos los clientes de Zernio comparten
+    // la suya. Que se llene no es un fallo de esta cuenta ni de la pieza, y el
+    // mensaje original en inglés no lo deja ver.
+    if (/active_user_cap|at capacity|active user quota/i.test(String(msg))) {
+      throw new Error(
+        'TikTok no acepta más publicaciones directas ahora mismo: el cupo diario que Zernio ' +
+          'comparte entre todos sus clientes está lleno. No es un problema de esta cuenta ni ' +
+          'de esta pieza. Vuelve a intentarlo más tarde; el cupo se libera en una ventana de 24 h.'
+      );
+    }
     throw new Error(`Zernio API ${res.status}: ${msg}`);
   }
   return json as T;
@@ -158,8 +169,8 @@ function isSupported(a: ZernioAccount): a is ZernioAccount & { platform: Platfor
 }
 
 // Todas las cuentas de la key que ContentOS sabe analizar. Zernio conecta 16
-// plataformas (y varias redes de anuncios); aquí solo interesan Instagram y
-// Facebook, así que el resto se descarta en vez de ofrecerlas y fallar luego.
+// plataformas (y varias redes de anuncios); aquí interesan Instagram, Facebook
+// y TikTok, así que el resto se descarta en vez de ofrecerlas y fallar luego.
 export async function listConnectedAccounts(apiKey: string): Promise<ZernioAccount[]> {
   const res = await zernioGet<{ accounts?: ZernioAccount[] }>(apiKey, '/v1/accounts');
   return (res.accounts ?? []).filter(isSupported);
@@ -200,7 +211,8 @@ export function toAccountOption(a: ZernioAccount): ZernioAccountOption {
   const p = a.metadata?.profileData;
   const platform: Platform = isSupported(a) ? a.platform : 'instagram';
   // Una Página de Facebook puede no tener nombre de usuario: ahí el nombre
-  // visible ES su identidad, así que se busca primero.
+  // visible ES su identidad, así que se busca primero. Instagram y TikTok sí
+  // tienen @usuario, y es su identidad real.
   const name =
     platform === 'facebook'
       ? firstText(a.displayName, p?.displayName, a.username, p?.username)
@@ -298,6 +310,10 @@ function buildDailySnapshots(posts: MediaPost[], accountId: string, followers: n
     const saves = sum('saves');
     const shares = sum('shares');
     const interactions = likes + comments + saves + shares;
+    // TikTok no expone reach por ninguna vía pública, así que llega en 0 y el
+    // engagement salía siempre 0 con él como divisor. Las vistas son la base
+    // que sí trae, y sobre la que se mide el engagement en TikTok de todos modos.
+    const base = reach || views;
     snapshots.push({
       id: `snap_${day}`,
       account_id: 'acc_' + accountId,
@@ -308,7 +324,7 @@ function buildDailySnapshots(posts: MediaPost[], accountId: string, followers: n
       views,
       reach,
       interactions,
-      engagement_rate: reach ? +((interactions / reach) * 100).toFixed(2) : 0,
+      engagement_rate: base ? +((interactions / base) * 100).toFixed(2) : 0,
       likes,
       comments,
       saves,
@@ -342,8 +358,8 @@ export async function syncFromZernio(ws: Workspace): Promise<{
   const accounts = await listConnectedAccounts(apiKey);
   if (accounts.length === 0) {
     throw new Error(
-      'Esta API key no tiene ninguna cuenta de Instagram ni Página de Facebook conectada en ' +
-        'Zernio. Conéctala primero en su panel.'
+      'Esta API key no tiene ninguna cuenta de Instagram, Página de Facebook ni cuenta de ' +
+        'TikTok conectada en Zernio. Conéctala primero en su panel.'
     );
   }
 
@@ -394,7 +410,8 @@ export async function syncFromZernio(ws: Workspace): Promise<{
     ig_user_id: ig._id,
     username,
     // Una Página de Facebook siempre es un perfil de negocio; en Instagram la
-    // cuenta tiene que ser Creator o Business para que haya métricas.
+    // cuenta tiene que ser Creator o Business para que haya métricas, y en
+    // TikTok un perfil de creador basta.
     account_type: platform === 'facebook' ? 'BUSINESS' : 'MEDIA_CREATOR',
     token_expires_at: new Date(Date.now() + 60 * 86400_000).toISOString(),
     last_sync_at: syncedAt,

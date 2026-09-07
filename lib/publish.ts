@@ -15,6 +15,7 @@
 // antes.
 import { createHash } from 'crypto';
 import {
+  Platform,
   Workspace,
   accountPlatform,
   getZernioKey,
@@ -63,23 +64,46 @@ export function emptyPublish(): CalendarPublish {
 // tanto en la interfaz (para explicarlo antes) como en el motor (para no
 // intentarlo).
 export function publishBlocker(ws: Workspace, item: CalendarItem): string | null {
+  const platform = accountPlatform(ws);
   if (!ws.zernio_account_id) {
     return 'Esta cuenta se creó antes del multicuenta y no tiene id de Zernio. Vuelve a añadirla en Conexión.';
   }
   if (item.format === 'ad') {
     return 'Los anuncios no se publican desde aquí: son otra superficie de la API (Meta Ads).';
   }
-  if (!item.media) return 'Falta el archivo: Instagram no acepta publicaciones sin imagen ni video.';
+  if (!item.media) return 'Falta el archivo: no se puede publicar sin imagen ni video.';
+  // En TikTok todo es video: no hay historias, y el carrusel de fotos no está
+  // soportado aquí. Bloquearlo con el motivo exacto evita que la pieza salga
+  // mal o falle en Zernio sin explicación.
+  if (platform === 'tiktok' && item.media.kind !== 'video') {
+    return 'TikTok solo publica video desde ContentOS. Sube un video en esta pieza.';
+  }
   if (item.format === 'reel' && item.media.kind !== 'video') {
     return 'Un reel necesita un video.';
   }
-  if (item.format === 'carrusel' && item.media.kind !== 'image') {
+  if (platform !== 'tiktok' && item.format === 'carrusel' && item.media.kind !== 'image') {
     return 'Sube una imagen: el carrusel de varias imágenes todavía no está soportado y esta pieza saldrá como publicación de feed.';
   }
   const text = captionFor(item);
-  if (text.length > 2200) return 'El texto pasa de 2200 caracteres, el máximo de Instagram.';
+  if (text.length > CAPTION_MAX[platform]) {
+    return `El texto pasa de ${CAPTION_MAX[platform]} caracteres, el máximo de ${PLATFORM_NAME[platform]}.`;
+  }
   return null;
 }
+
+const CAPTION_MAX: Record<Platform, number> = {
+  instagram: 2200,
+  facebook: 2200,
+  // TikTok subió su descripción a 4000 caracteres, pero 2200 es el límite que
+  // acepta con seguridad en cualquier cuenta.
+  tiktok: 2200,
+};
+
+const PLATFORM_NAME: Record<Platform, string> = {
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  tiktok: 'TikTok',
+};
 
 export function captionFor(item: CalendarItem): string {
   return (item.caption ?? '').trim() || item.title.trim();
@@ -91,16 +115,59 @@ export function captionFor(item: CalendarItem): string {
 function platformTarget(ws: Workspace, item: CalendarItem) {
   const platform = accountPlatform(ws);
   const data: Record<string, unknown> = {};
-  if (item.format === 'historia') {
-    data.contentType = 'story';
-  } else if (item.format === 'reel') {
-    if (platform === 'facebook') data.contentType = 'reel';
-    else data.shareToFeed = true; // el reel también aparece en el feed principal
+  // En TikTok todo vídeo es un vídeo a secas: no hay historias ni "compartir al
+  // feed", y sus opciones van aparte, en `tiktokSettings`.
+  if (platform !== 'tiktok') {
+    if (item.format === 'historia') {
+      data.contentType = 'story';
+    } else if (item.format === 'reel') {
+      if (platform === 'facebook') data.contentType = 'reel';
+      else data.shareToFeed = true; // el reel también aparece en el feed principal
+    }
   }
   return {
     platform,
     accountId: ws.zernio_account_id as string,
     ...(Object.keys(data).length ? { platformSpecificData: data } : {}),
+  };
+}
+
+// ── Opciones obligatorias de TikTok ─────────────────────────
+// TikTok no acepta una publicación sin ellas, y `privacyLevel` tiene que salir
+// de creator-info: los valores permitidos dependen de la cuenta (una cuenta
+// privada no puede publicar en público) y mandar uno no permitido la rechaza.
+interface TikTokCreatorInfo {
+  privacyLevels?: string[];
+}
+
+async function tiktokSettings(
+  apiKey: string,
+  accountId: string
+): Promise<Record<string, unknown>> {
+  const info = await zernioRequest<TikTokCreatorInfo>(apiKey, {
+    path: `/v1/accounts/${accountId}/tiktok/creator-info`,
+    params: { mediaType: 'video' },
+  });
+  const allowed = info.privacyLevels ?? [];
+  const privacyLevel = allowed.includes('PUBLIC_TO_EVERYONE')
+    ? 'PUBLIC_TO_EVERYONE'
+    : allowed[0];
+  if (!privacyLevel) {
+    throw new Error(
+      'TikTok no devolvió ningún nivel de privacidad permitido para esta cuenta. ' +
+        'Vuelve a autorizarla en el panel de Zernio.'
+    );
+  }
+  return {
+    privacyLevel,
+    allowComment: true,
+    allowDuet: true,
+    allowStitch: true,
+    // TikTok exige constancia de que una persona vio el contenido y consintió
+    // publicarlo. En ContentOS eso es literalmente lo que ocurre: la pieza se
+    // aprueba con su vídeo y su texto delante antes de activar la publicación.
+    contentPreviewConfirmed: true,
+    expressConsentGiven: true,
   };
 }
 
@@ -186,6 +253,12 @@ export async function pushToZernio(
   const publishNow = Boolean(opts.now) || scheduled.getTime() <= Date.now() + 60_000;
 
   try {
+    // Las opciones de TikTok van en la RAÍZ del cuerpo, no dentro de la
+    // plataforma: es la única red que Zernio trata así.
+    const tiktok =
+      accountPlatform(ws) === 'tiktok'
+        ? await tiktokSettings(apiKey, ws.zernio_account_id as string)
+        : null;
     const url = await uploadToZernio(apiKey, item);
     const res = await zernioRequest<ZernioPostResponse>(apiKey, {
       method: 'POST',
@@ -196,6 +269,7 @@ export async function pushToZernio(
         content: captionFor(item),
         mediaItems: [{ url, type: item.media!.kind }],
         platforms: [platformTarget(ws, item)],
+        ...(tiktok ? { tiktokSettings: tiktok } : {}),
         // Instante UTC absoluto con sufijo Z. Con `Z` la API ignora el campo
         // `timezone`, que es justo lo que se quiere: la hora no depende ni de
         // la zona del servidor ni de la del panel de Zernio.

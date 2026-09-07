@@ -6,8 +6,9 @@ import { listConnectedAccounts, toAccountOption } from '@/lib/zernio';
 
 const schema = z.object({ apiKey: z.string().min(10).max(400) });
 
-// Valida una API key de Zernio y devuelve las cuentas de Instagram y Páginas de
-// Facebook que tiene conectadas, marcando las que el usuario ya tiene añadidas.
+// Valida una API key de Zernio y devuelve las cuentas de Instagram, Páginas de
+// Facebook y TikTok que tiene conectadas, marcando las que el usuario ya tiene
+// añadidas.
 // La key NO se guarda: solo se usa para esta consulta; se persiste al crear la
 // cuenta.
 export async function POST(req: NextRequest) {
@@ -47,8 +48,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          'Esa API key no tiene ninguna cuenta de Instagram ni Página de Facebook conectada. ' +
-          'Conéctala primero en el panel de Zernio.',
+          'Esa API key no tiene ninguna cuenta de Instagram, Página de Facebook ni cuenta de ' +
+          'TikTok conectada. Conéctala primero en el panel de Zernio.',
       },
       { status: 404 }
     );

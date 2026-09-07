@@ -22,6 +22,7 @@ import { Button, Card, Input, Modal, Spinner } from '@/components/ui';
 import {
   AccountAvatar,
   AccountRow,
+  PLATFORM_NAME,
   Platform,
   PlatformBadge,
   handle,
@@ -57,7 +58,7 @@ const FLOW_STEPS = [
   {
     n: 1,
     title: 'Cuenta profesional',
-    desc: 'En Instagram, la cuenta debe ser Creator o Business — requisito de Instagram para entregar métricas. En Facebook tiene que ser una Página, no un perfil personal.',
+    desc: 'En Instagram, la cuenta debe ser Creator o Business — requisito de Instagram para entregar métricas. En Facebook tiene que ser una Página, no un perfil personal. En TikTok, un perfil de creador o de empresa.',
   },
   {
     n: 2,
@@ -231,7 +232,7 @@ export default function ConexionPage() {
     <div>
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <p className="accent-label mb-1">Datos reales de Instagram y Facebook</p>
+          <p className="accent-label mb-1">Datos reales de Instagram, Facebook y TikTok</p>
           <h1 className="text-xl font-extrabold">Conexión de API ⭐</h1>
           <p className="text-sm text-muted mt-1">
             Cada cuenta se conecta con su propia API key de Zernio y tiene sus datos aparte.
@@ -254,13 +255,14 @@ export default function ConexionPage() {
           <p className="text-sm text-muted leading-relaxed mb-5">
             Para traer tus métricas reales hace falta una sola credencial: tu{' '}
             <strong className="text-soft">API key de Zernio</strong>. Zernio es el puente con
-            Instagram y con las Páginas de Facebook — evita tener que crear tu propia app de
-            Meta.
+            Instagram, con las Páginas de Facebook y con TikTok — evita tener que crear tu
+            propia app en cada red.
           </p>
           <div className="text-left text-xs text-muted bg-bg border border-line rounded-xl px-4 py-3.5 mb-6 space-y-1.5">
             <p>
               <strong className="text-soft">1.</strong> En Instagram, la cuenta tiene que ser
-              Creator o Business. En Facebook, una Página.
+              Creator o Business. En Facebook, una Página. En TikTok, un perfil de creador o
+              de empresa.
             </p>
             <p>
               <strong className="text-soft">2.</strong> Conectala en{' '}
@@ -564,9 +566,7 @@ export default function ConexionPage() {
                   Fuente:{' '}
                   <span className="text-soft font-semibold">
                     {data?.source === 'zernio'
-                    ? `Zernio · ${
-                        data.workspace?.platform === 'facebook' ? 'Facebook' : 'Instagram'
-                      } real`
+                    ? `Zernio · ${PLATFORM_NAME[data.workspace?.platform ?? 'instagram']} real`
                     : 'Datos demo'}
                   </span>
                 </div>
@@ -785,8 +785,9 @@ function AddAccountModal({
         <>
           <p className="text-xs text-muted mb-4 leading-relaxed">
             Pega la API key de la cuenta de Zernio donde está conectada la cuenta. Aparecerán
-            todas sus cuentas de Instagram y Páginas de Facebook. Puede ser la misma key que
-            ya usas o la de otra cuenta de Zernio distinta. Se guarda cifrada en el servidor.
+            todas sus cuentas de Instagram, Páginas de Facebook y cuentas de TikTok. Puede ser
+            la misma key que ya usas o la de otra cuenta de Zernio distinta. Se guarda cifrada
+            en el servidor.
           </p>
           <Input
             label="API key de Zernio"
@@ -811,7 +812,7 @@ function AddAccountModal({
       ) : (
         <>
           <p className="text-xs text-muted mb-4 leading-relaxed">
-            Cuentas conectadas a esa key — Instagram y Páginas de Facebook.{' '}
+            Cuentas conectadas a esa key — Instagram, Páginas de Facebook y TikTok.{' '}
             <strong className="text-soft">Puedes añadir varias</strong>: cada una queda como
             una cuenta aparte, con sus propias métricas.
           </p>
