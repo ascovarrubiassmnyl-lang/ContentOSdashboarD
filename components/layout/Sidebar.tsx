@@ -10,6 +10,7 @@ import {
   Home,
   Lightbulb,
   Plug,
+  Send,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -26,6 +27,7 @@ const clientViews: { href: string | null; label: string; icon: typeof Home }[] =
 ];
 
 const adminViews: { href: string | null; label: string; icon: typeof Home }[] = [
+  { href: '/publicar', label: 'Publicar', icon: Send },
   { href: '/ideas', label: 'Banco de ideas', icon: Lightbulb },
   { href: '/calendario', label: 'Calendario', icon: CalendarDays },
   { href: '/estrategia', label: 'Estrategia', icon: Compass },
