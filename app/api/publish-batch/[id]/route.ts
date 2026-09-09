@@ -13,25 +13,32 @@ export const runtime = 'nodejs';
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function DELETE(req: NextRequest, ctx: Ctx) {
-  const { id } = await ctx.params;
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  try {
+    const { id } = await ctx.params;
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
-  const accountId = req.nextUrl.searchParams.get('account_id');
-  if (!accountId) return NextResponse.json({ error: 'Falta la cuenta.' }, { status: 400 });
-  const ws = await getAccountForUser(accountId, user.id);
-  if (!ws) return NextResponse.json({ error: 'Cuenta no encontrada.' }, { status: 404 });
+    const accountId = req.nextUrl.searchParams.get('account_id');
+    if (!accountId) return NextResponse.json({ error: 'Falta la cuenta.' }, { status: 400 });
+    const ws = await getAccountForUser(accountId, user.id);
+    if (!ws) return NextResponse.json({ error: 'Cuenta no encontrada.' }, { status: 404 });
 
-  const items = await readFor<CalendarItem>(ws, 'calendar_items');
-  const item = items.find((i) => i.id === id);
-  if (item) {
-    await cancelInZernio(ws, item);
-    if (item.media) await deleteMedia(item.media.key);
+    const items = await readFor<CalendarItem>(ws, 'calendar_items');
+    const item = items.find((i) => i.id === id);
+    if (item) {
+      await cancelInZernio(ws, item);
+      if (item.media) await deleteMedia(item.media.key);
+    }
+    await writeFor(
+      ws,
+      'calendar_items',
+      items.filter((i) => i.id !== id)
+    );
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json(
+      { error: (err as Error).message || 'No se pudo quitar la pieza.' },
+      { status: 500 }
+    );
   }
-  await writeFor(
-    ws,
-    'calendar_items',
-    items.filter((i) => i.id !== id)
-  );
-  return NextResponse.json({ ok: true });
 }

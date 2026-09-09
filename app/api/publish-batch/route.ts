@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { accountPlatform, getAccountForUser, listAccountsForUser, readFor, writeFor } from '@/lib/accounts';
 import { uid } from '@/lib/db';
-import { advanceItem, emptyPublish, publishBlocker } from '@/lib/publish';
+import { advanceItem, emptyPublish, isWithinPushWindow, publishBlocker } from '@/lib/publish';
 import { maxUploadBytes, mediaKind, putMedia } from '@/lib/media/store';
 import { CalendarFormat, CalendarItem } from '@/types';
 
@@ -19,29 +19,36 @@ export const runtime = 'nodejs';
 // cuentas del usuario — no solo la activa, porque una pieza puede vivir en
 // cualquiera de los perfiles elegidos al subirla.
 export async function GET() {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  try {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
-  const accounts = await listAccountsForUser(user.id);
-  const rows: (CalendarItem & {
-    account_label: string;
-    account_platform: string;
-    account_color: string;
-  })[] = [];
-  for (const ws of accounts) {
-    const items = await readFor<CalendarItem>(ws, 'calendar_items');
-    for (const item of items) {
-      if (!item.publish && !item.media) continue;
-      rows.push({
-        ...item,
-        account_label: ws.label,
-        account_platform: accountPlatform(ws),
-        account_color: ws.color,
-      });
+    const accounts = await listAccountsForUser(user.id);
+    const rows: (CalendarItem & {
+      account_label: string;
+      account_platform: string;
+      account_color: string;
+    })[] = [];
+    for (const ws of accounts) {
+      const items = await readFor<CalendarItem>(ws, 'calendar_items');
+      for (const item of items) {
+        if (!item.publish && !item.media) continue;
+        rows.push({
+          ...item,
+          account_label: ws.label,
+          account_platform: accountPlatform(ws),
+          account_color: ws.color,
+        });
+      }
     }
+    rows.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+    return NextResponse.json({ items: rows });
+  } catch (err) {
+    return NextResponse.json(
+      { error: (err as Error).message || 'No se pudo cargar lo programado.' },
+      { status: 500 }
+    );
   }
-  rows.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
-  return NextResponse.json({ items: rows });
 }
 
 interface AccountResult {
@@ -52,124 +59,153 @@ interface AccountResult {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-  const form = await req.formData();
-  const file = form.get('file');
-  const caption = String(form.get('caption') ?? '').trim();
-  const scheduledAtRaw = String(form.get('scheduled_at') ?? '');
-  const accountIdsRaw = String(form.get('account_ids') ?? '[]');
-
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: 'Falta el archivo.' }, { status: 400 });
-  }
-  const scheduledDate = new Date(scheduledAtRaw);
-  if (Number.isNaN(scheduledDate.getTime())) {
-    return NextResponse.json({ error: 'Fecha u hora inválida.' }, { status: 400 });
-  }
-  let accountIds: unknown;
   try {
-    accountIds = JSON.parse(accountIdsRaw);
-  } catch {
-    accountIds = null;
-  }
-  if (!Array.isArray(accountIds) || accountIds.length === 0) {
-    return NextResponse.json({ error: 'Elige al menos un perfil.' }, { status: 400 });
-  }
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
-  const mime = file.type.split(';')[0].trim().toLowerCase();
-  const kind = mediaKind(mime);
-  if (!kind) {
-    return NextResponse.json(
-      {
-        error: `Tipo de archivo no soportado (${mime || 'desconocido'}). Usa MP4/MOV/WebM para video o JPG/PNG/WebP para imagen.`,
-      },
-      { status: 415 }
-    );
-  }
-  const max = maxUploadBytes();
-  if (file.size > max) {
-    return NextResponse.json(
-      { error: `El archivo pesa más del máximo permitido (${Math.round(max / 1024 / 1024)} MB).` },
-      { status: 413 }
-    );
-  }
-  const bytes = Buffer.from(await file.arrayBuffer());
-  if (bytes.byteLength === 0) {
-    return NextResponse.json({ error: 'El archivo llegó vacío.' }, { status: 400 });
-  }
+    const form = await req.formData();
+    const file = form.get('file');
+    const caption = String(form.get('caption') ?? '').trim();
+    const scheduledAtRaw = String(form.get('scheduled_at') ?? '');
+    const accountIdsRaw = String(form.get('account_ids') ?? '[]');
 
-  const title = (caption || 'Publicación programada').slice(0, 160);
-  // Un solo archivo de video sale como reel; una sola imagen sale como
-  // publicación de feed (el mismo criterio que usa PublishBlock en Calendario).
-  const format: CalendarFormat = kind === 'video' ? 'reel' : 'carrusel';
-
-  const results: AccountResult[] = [];
-  for (const accountId of accountIds) {
-    if (typeof accountId !== 'string') continue;
-    const ws = await getAccountForUser(accountId, user.id);
-    if (!ws) {
-      results.push({ account_id: accountId, label: accountId, ok: false, error: 'Cuenta no encontrada.' });
-      continue;
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: 'Falta el archivo.' }, { status: 400 });
     }
-
-    // Se comprueba con un item "de prueba" (sin subir el archivo todavía) para
-    // no dejar un binario huérfano si esta cuenta no puede publicarlo — p. ej.
-    // una imagen hacia un perfil de TikTok.
-    const probe: CalendarItem = {
-      id: 'probe',
-      account_id: ws.id,
-      script_id: null,
-      title,
-      format,
-      nivel: null,
-      scheduled_at: scheduledDate.toISOString(),
-      status: 'idea',
-      notes: '',
-      caption,
-      media: {
-        key: '',
-        filename: file.name || 'archivo',
-        mime,
-        size: bytes.byteLength,
-        kind,
-        uploaded_at: new Date().toISOString(),
-      },
-      publish: null,
-    };
-    const blocker = publishBlocker(ws, probe);
-    if (blocker) {
-      results.push({ account_id: ws.id, label: ws.label, ok: false, error: blocker });
-      continue;
+    const scheduledDate = new Date(scheduledAtRaw);
+    if (Number.isNaN(scheduledDate.getTime())) {
+      return NextResponse.json({ error: 'Fecha u hora inválida.' }, { status: 400 });
     }
-
+    let accountIds: unknown;
     try {
-      const stored = await putMedia(bytes, { filename: file.name || 'archivo', mime });
-      const item: CalendarItem = {
-        ...probe,
-        id: uid(),
-        media: {
-          key: stored.key,
-          filename: stored.filename,
-          mime: stored.mime,
-          size: stored.size,
-          kind,
-          uploaded_at: stored.created_at,
-        },
-        publish: { ...emptyPublish(), auto: true },
-      };
-      const items = await readFor<CalendarItem>(ws, 'calendar_items');
-      items.push(item);
-      await writeFor(ws, 'calendar_items', items);
-      // Si la hora ya está dentro de la ventana de subida, sale de inmediato en
-      // vez de esperar al siguiente pase del cron.
-      await advanceItem(ws, item.id);
-      results.push({ account_id: ws.id, label: ws.label, ok: true });
-    } catch (err) {
-      results.push({ account_id: ws.id, label: ws.label, ok: false, error: (err as Error).message });
+      accountIds = JSON.parse(accountIdsRaw);
+    } catch {
+      accountIds = null;
     }
-  }
+    if (!Array.isArray(accountIds) || accountIds.length === 0) {
+      return NextResponse.json({ error: 'Elige al menos un perfil.' }, { status: 400 });
+    }
 
-  return NextResponse.json({ results });
+    const mime = file.type.split(';')[0].trim().toLowerCase();
+    const kind = mediaKind(mime);
+    if (!kind) {
+      return NextResponse.json(
+        {
+          error: `Tipo de archivo no soportado (${mime || 'desconocido'}). Usa MP4/MOV/WebM para video o JPG/PNG/WebP para imagen.`,
+        },
+        { status: 415 }
+      );
+    }
+    const max = maxUploadBytes();
+    if (file.size > max) {
+      return NextResponse.json(
+        { error: `El archivo pesa más del máximo permitido (${Math.round(max / 1024 / 1024)} MB).` },
+        { status: 413 }
+      );
+    }
+    const bytes = Buffer.from(await file.arrayBuffer());
+    if (bytes.byteLength === 0) {
+      return NextResponse.json({ error: 'El archivo llegó vacío.' }, { status: 400 });
+    }
+
+    const title = (caption || 'Publicación programada').slice(0, 160);
+    // Un solo archivo de video sale como reel; una sola imagen sale como
+    // publicación de feed (el mismo criterio que usa PublishBlock en Calendario).
+    const format: CalendarFormat = kind === 'video' ? 'reel' : 'carrusel';
+
+    // Un perfil por cuenta, EN PARALELO. El servicio de cron de 15 min que
+    // empujaría esto en segundo plano no está desplegado en este proyecto
+    // (ver DEPLOY.md), así que cada perfil dentro de la ventana de subida
+    // (PUBLISH_LEAD_DAYS) se empuja a Zernio en el acto, igual que hace
+    // PublishBlock en Calendario para una sola pieza. Hacerlo en PARALELO en
+    // vez de uno tras otro es lo que evita que 2-3 perfiles multipliquen el
+    // tiempo de la petición hasta que el navegador corta la conexión y
+    // `res.json()` revienta con "unexpected end of JSON input".
+    const results = await Promise.all(
+      accountIds.map(async (accountId): Promise<AccountResult> => {
+        if (typeof accountId !== 'string') {
+          return { account_id: String(accountId), label: String(accountId), ok: false, error: 'Perfil inválido.' };
+        }
+        try {
+          const ws = await getAccountForUser(accountId, user.id);
+          if (!ws) {
+            return { account_id: accountId, label: accountId, ok: false, error: 'Cuenta no encontrada.' };
+          }
+
+          // Se comprueba con un item "de prueba" (sin subir el archivo
+          // todavía) para no dejar un binario huérfano si esta cuenta no
+          // puede publicarlo — p. ej. una imagen hacia un perfil de TikTok.
+          const probe: CalendarItem = {
+            id: 'probe',
+            account_id: ws.id,
+            script_id: null,
+            title,
+            format,
+            nivel: null,
+            scheduled_at: scheduledDate.toISOString(),
+            status: 'idea',
+            notes: '',
+            caption,
+            media: {
+              key: '',
+              filename: file.name || 'archivo',
+              mime,
+              size: bytes.byteLength,
+              kind,
+              uploaded_at: new Date().toISOString(),
+            },
+            publish: null,
+          };
+          const blocker = publishBlocker(ws, probe);
+          if (blocker) {
+            return { account_id: ws.id, label: ws.label, ok: false, error: blocker };
+          }
+
+          const stored = await putMedia(bytes, { filename: file.name || 'archivo', mime });
+          const item: CalendarItem = {
+            ...probe,
+            id: uid(),
+            media: {
+              key: stored.key,
+              filename: stored.filename,
+              mime: stored.mime,
+              size: stored.size,
+              kind,
+              uploaded_at: stored.created_at,
+            },
+            publish: { ...emptyPublish(), auto: true, state: 'pendiente' },
+          };
+          const items = await readFor<CalendarItem>(ws, 'calendar_items');
+          items.push(item);
+          await writeFor(ws, 'calendar_items', items);
+
+          // Dentro de la ventana de subida, se empuja ya — si se deja para
+          // el próximo pase automático y no hay cron desplegado, podría no
+          // haber ningún pase.
+          let final = item;
+          if (isWithinPushWindow(item)) {
+            final = (await advanceItem(ws, item.id)) ?? item;
+          }
+          if (final.publish?.state === 'error') {
+            return {
+              account_id: ws.id,
+              label: ws.label,
+              ok: false,
+              error: final.publish.error ?? 'No se pudo publicar.',
+            };
+          }
+          return { account_id: ws.id, label: ws.label, ok: true };
+        } catch (err) {
+          return { account_id: accountId, label: accountId, ok: false, error: (err as Error).message };
+        }
+      })
+    );
+
+    return NextResponse.json({ results });
+  } catch (err) {
+    return NextResponse.json(
+      { error: (err as Error).message || 'No se pudo programar la publicación.' },
+      { status: 500 }
+    );
+  }
 }

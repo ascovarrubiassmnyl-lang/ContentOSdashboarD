@@ -67,6 +67,18 @@ interface BatchResult {
   error?: string;
 }
 
+// Si el servidor corta la respuesta a medias (timeout, video muy pesado) el
+// cuerpo llega vacío y `res.json()` revienta con "Unexpected end of JSON
+// input" — un error que no dice nada al usuario. Mejor un objeto vacío y un
+// mensaje genérico que se pueda entender.
+async function safeJson(res: Response): Promise<{ error?: string; results?: BatchResult[] }> {
+  try {
+    return await res.json();
+  } catch {
+    return {};
+  }
+}
+
 export default function PublicarPage() {
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -116,8 +128,13 @@ export default function PublicarPage() {
       body.append('scheduled_at', scheduled_at);
       body.append('account_ids', JSON.stringify([...selected]));
       const res = await fetch('/api/publish-batch', { method: 'POST', body });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'No se pudo programar la publicación.');
+      const data = await safeJson(res);
+      if (!res.ok) {
+        throw new Error(
+          data.error ??
+            'El servidor no respondió (puede ser un video muy pesado o la conexión). Intenta de nuevo, o con un archivo más chico.'
+        );
+      }
       return data.results as BatchResult[];
     },
     onSuccess: (results) => {
@@ -138,7 +155,10 @@ export default function PublicarPage() {
       const res = await fetch(`/api/publish-batch/${id}?account_id=${accountId}`, {
         method: 'DELETE',
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? 'No se pudo quitar.');
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(data.error ?? 'No se pudo quitar.');
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['publish-batch'] }),
   });
@@ -153,8 +173,9 @@ export default function PublicarPage() {
         </h1>
         <p className="text-sm text-muted mt-1 max-w-2xl">
           Sube el video de tu cliente, escribe el texto, elige el día y la hora, y marca en qué
-          perfiles sale. ContentOS lo guarda y lo publica solo, sin que tengas que volver a abrir
-          la app.
+          perfiles sale. Si la fecha es de los próximos días, queda &ldquo;Programada&rdquo; de
+          una vez; si es más adelante, se guarda &ldquo;En espera&rdquo; y avanza sola cuando se
+          acerca — no hace falta volver a abrir la app.
         </p>
       </div>
 
