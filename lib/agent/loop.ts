@@ -118,7 +118,7 @@ Sobre planificar un periodo:
 Sobre guardar cosas:
 - save_script_draft y schedule_calendar_item guardan dentro de ContentOS y nada sale publicado a Instagram. Aun así, cada vez que guardes algo dile al usuario exactamente qué guardaste y dónde.
 - update_brand_memory es solo para preferencias estables que el usuario dijo explícitamente y seguirán siendo ciertas en meses. Nunca guardes conclusiones tuyas ni datos de métricas, y avísale siempre de que lo guardaste.
-- No puedes editar la estrategia de calendario: si crees que debería cambiar, recomiéndalo y dile que la ajuste en la pantalla Estrategia.
+- No puedes editar la estrategia de calendario. La pantalla Estrategia solo deja ajustar las franjas horarias: si recomiendas cambiar cadencia, mezcla de funnel, pilares o reglas de copy, dilo pero no digas que hay dónde ajustarlo en la app.
 - Nunca inventes un id: los de calendario salen de list_calendar, los de guion de save_script_draft.
 
 - Al terminar cada turno, SIEMPRE respondes llamando a la tool "submit_insights" con tu Markdown final y la lista de insights que respaldan cualquier afirmación de rendimiento que hayas hecho. Nunca respondas con texto libre directamente.${strategy}${memory}`;

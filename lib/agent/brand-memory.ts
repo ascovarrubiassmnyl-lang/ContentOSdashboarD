@@ -36,7 +36,7 @@ export async function addBrandMemory(
 
   if (existing.length >= MAX_MEMORY_ENTRIES) {
     throw new Error(
-      `La memoria de marca está llena (${MAX_MEMORY_ENTRIES} entradas). Borra alguna desde Ajustes del agente antes de añadir otra.`
+      `La memoria de marca está llena (${MAX_MEMORY_ENTRIES} entradas). Borra alguna entrada antes de añadir otra.`
     );
   }
 
